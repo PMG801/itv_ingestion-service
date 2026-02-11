@@ -23,6 +23,14 @@ services:
       - ./infra/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
     networks:
       - itv_network
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1GB
+        reservations:
+          cpus: "0.25"
+          memory: 256MB
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
       interval: 10s
@@ -45,6 +53,14 @@ services:
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     networks:
       - itv_network
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1GB
+        reservations:
+          cpus: "0.25"
+          memory: 256MB
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-itv_user} -d ${POSTGRES_DB:-itv_database}"]
       interval: 10s
@@ -87,6 +103,14 @@ services:
       - ./domain:/app/domain
     networks:
       - itv_network
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256MB
+        reservations:
+          cpus: "0.1"
+          memory: 128MB
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -116,6 +140,14 @@ services:
       - ./providers:/app/providers
     networks:
       - itv_network
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512MB
+        reservations:
+          cpus: "0.5"
+          memory: 256MB
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -148,6 +180,14 @@ services:
       - ./domain:/app/domain
     networks:
       - itv_network
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128MB
+        reservations:
+          cpus: "0.1"
+          memory: 64MB
     depends_on:
       rabbitmq:
         condition: service_healthy
