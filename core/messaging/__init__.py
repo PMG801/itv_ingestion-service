@@ -1,0 +1,1 @@
+# Messaging module - RabbitMQ wrappers
