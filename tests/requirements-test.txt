@@ -1,0 +1,18 @@
+# Test Requirements
+# Instalar con: pip install -r tests/requirements-test.txt
+
+# Testing framework
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-asyncio==0.21.1
+
+# Mocking
+pytest-mock==3.12.0
+
+# FastAPI testing
+httpx==0.25.2
+
+# Base requirements (deben estar en requirements.txt principal)
+# fastapi
+# pydantic
+# uvicorn
