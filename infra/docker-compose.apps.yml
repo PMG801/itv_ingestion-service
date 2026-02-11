@@ -1,0 +1,133 @@
+version: '3.8'
+
+# Servicios de aplicación (Gateway, Normalizer, Persister)
+# Requiere docker-compose.infrastructure.yml levantado primero
+# Levantar con: docker-compose -f infra/docker-compose.apps.yml up --build
+
+services:
+  # Gateway - FastAPI service
+  gateway:
+    build:
+      context: ..
+      dockerfile: apps/gateway/Dockerfile
+    container_name: itv_gateway
+    ports:
+      - "${GATEWAY_PORT:-8000}:8000"
+    environment:
+      # Application
+      APP_NAME: "ITV Gateway Service"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      
+      # RabbitMQ
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_PASS: ${RABBITMQ_PASS:-admin123}
+      RABBITMQ_VHOST: ${RABBITMQ_VHOST:-itv_data}
+      
+      # Python
+      PYTHONUNBUFFERED: 1
+      PYTHONPATH: /app
+    volumes:
+      - ../apps/gateway:/app/apps/gateway
+      - ../core:/app/core
+      - ../domain:/app/domain
+    networks:
+      - itv_network
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+    command: ["uvicorn", "apps.gateway.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  # Normalizer - Worker service
+  normalizer:
+    build:
+      context: ..
+      dockerfile: apps/normalizer/Dockerfile
+    container_name: itv_normalizer
+    environment:
+      # Application
+      APP_NAME: "ITV Normalizer Worker"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      
+      # RabbitMQ
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_PASS: ${RABBITMQ_PASS:-admin123}
+      RABBITMQ_VHOST: ${RABBITMQ_VHOST:-itv_data}
+      
+      # Queue configuration
+      INPUT_QUEUE: raw_data.itv_stations
+      OUTPUT_EXCHANGE: normalized_data
+      
+      # Python
+      PYTHONUNBUFFERED: 1
+      PYTHONPATH: /app
+    volumes:
+      - ../apps/normalizer:/app/apps/normalizer
+      - ../core:/app/core
+      - ../domain:/app/domain
+      - ../providers:/app/providers
+    networks:
+      - itv_network
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      replicas: ${NORMALIZER_REPLICAS:-2}
+    command: ["python", "-m", "apps.normalizer.worker"]
+
+  # Persister - Worker service
+  persister:
+    build:
+      context: ..
+      dockerfile: apps/persister/Dockerfile
+    container_name: itv_persister
+    environment:
+      # Application
+      APP_NAME: "ITV Persister Worker"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      
+      # RabbitMQ
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_PASS: ${RABBITMQ_PASS:-admin123}
+      RABBITMQ_VHOST: ${RABBITMQ_VHOST:-itv_data}
+      
+      # Queue configuration
+      INPUT_QUEUE: normalized_data.itv_stations
+      
+      # PostgreSQL
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-itv_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-itv_pass123}
+      POSTGRES_DB: ${POSTGRES_DB:-itv_database}
+      
+      # Python
+      PYTHONUNBUFFERED: 1
+      PYTHONPATH: /app
+    volumes:
+      - ../apps/persister:/app/apps/persister
+      - ../core:/app/core
+      - ../domain:/app/domain
+    networks:
+      - itv_network
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      replicas: ${PERSISTER_REPLICAS:-1}
+    command: ["python", "-m", "apps.persister.worker"]
+
+networks:
+  itv_network:
+    external: true
+    name: itv_network

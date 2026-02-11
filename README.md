@@ -1,0 +1,150 @@
+# ITV Data Engine - Motor de Ingesta y Normalización Universal
+
+Sistema backend de alto rendimiento para la ingesta, normalización y persistencia de datos heterogéneos.
+
+## 🏗️ Arquitectura
+
+```
+┌─────────────┐      ┌──────────────┐      ┌─────────────┐      ┌──────────────┐
+│   Gateway   │─────▶│   RabbitMQ   │─────▶│ Normalizer  │─────▶│  PostgreSQL  │
+│  (FastAPI)  │      │ (raw_data)   │      │  (Worker)   │      │   + PostGIS  │
+└─────────────┘      └──────────────┘      └─────────────┘      └──────────────┘
+                                                  │
+                                                  ▼
+                                            ┌──────────────┐
+                                            │   RabbitMQ   │
+                                            │(normalized)  │
+                                            └──────────────┘
+                                                  │
+                                                  ▼
+                                            ┌─────────────┐
+                                            │  Persister  │
+                                            │  (Worker)   │
+                                            └─────────────┘
+```
+
+## 📁 Estructura del Proyecto
+
+```
+/itv-ingestion-service
+├── /apps                  # Microservicios ejecutables
+│   ├── /gateway          # FastAPI - Punto de entrada
+│   ├── /normalizer       # Worker de transformación
+│   └── /persister        # Worker de persistencia
+├── /core                  # Lógica agnóstica al dominio
+│   ├── /messaging        # Wrappers de RabbitMQ
+│   ├── /database         # Conexión PostgreSQL
+│   └── /logging          # Configuración de logs
+├── /domain               # Lógica de negocio
+│   └── /itv_stations     # Dominio ITV
+├── /providers            # Adaptadores de APIs externas
+│   ├── /catalunya_api    # XML Cataluña
+│   └── /valencia_api     # JSON Valencia
+├── /infra                # Configuración de infraestructura
+│   ├── /rabbitmq         # Definiciones y configuración
+│   └── /postgres         # Scripts de inicialización
+└── /docs                 # Documentación del proyecto
+```
+
+## 🚀 Quick Start
+
+### Prerrequisitos
+- Docker & Docker Compose
+- Python 3.11+ (para desarrollo local)
+- PDM (Python Dependency Manager): `pip install pdm`
+
+### 1. Configurar variables de entorno
+```bash
+cp .env.example .env
+# Editar .env con tus credenciales
+```
+
+### 2. Levantar infraestructura completa
+```bash
+# Todo en uno (infraestructura + aplicaciones)
+docker-compose up --build
+
+# O por separado:
+# 1. Solo infraestructura (RabbitMQ + PostgreSQL)
+docker-compose -f infra/docker-compose.infrastructure.yml up -d
+
+# 2. Aplicaciones
+docker-compose -f infra/docker-compose.apps.yml up --build
+```
+
+### 3. Verificar servicios
+- **Gateway API:** http://localhost:8000/docs
+- **RabbitMQ Management:** http://localhost:15672 (admin/admin123)
+- **PostgreSQL:** localhost:5432
+
+## 🧪 Desarrollo Local
+
+```bash
+# Instalar PDM
+pip install pdm
+
+# Instalar dependencias
+pdm install
+
+# Instalar dependencias de desarrollo
+pdm install -d
+
+# Ejecutar tests
+pdm run test
+
+# Con cobertura
+pdm run test-cov
+
+# Formatear código
+pdm run format
+
+# Linting
+pdm run lint
+
+# Type checking
+pdm run type-check
+```
+
+## 📋 Endpoints Principales
+
+### Gateway (Puerto 8000)
+- `GET /health` - Health check
+- `POST /ingest/itv` - Ingesta de datos ITV
+
+## 🔧 Configuración Avanzada
+
+### Escalado de Workers
+Edita el archivo `.env`:
+```bash
+NORMALIZER_REPLICAS=4  # Número de workers normalizadores
+PERSISTER_REPLICAS=2   # Número de workers persistidores
+```
+
+### RabbitMQ Exchanges y Queues
+- **raw_data:** Datos sin procesar
+- **normalized_data:** Datos normalizados
+- **dlx:** Dead Letter Exchange (mensajes fallidos)
+
+Ver configuración completa en `infra/rabbitmq/definitions.json`
+
+## 📚 Documentación
+
+- [Contexto del Proyecto](docs/PROJECT_CONTEXT.md)
+- [Mapa de Arquitectura](docs/ARCHITECTURE_MAP.md)
+- [Stack Tecnológico](docs/TECH_STACK.md)
+- [Reglas de Desarrollo](docs/CODING_RULES.md)
+- [Contratos de Datos](docs/DATA_CONTRACTS.md)
+
+## 🛠️ Stack Tecnológico
+
+- **Python 3.11+**
+- **FastAPI** - Web framework
+- **RabbitMQ** - Message broker (aio-pika)
+- **PostgreSQL 15 + PostGIS** - Base de datos geoespacial
+- **SQLAlchemy 2.0** - ORM async
+- **Pydantic v2** - Validación de datos
+- **Docker** - Containerización
+
+## 📝 Licencia
+
+TFG - Ingeniería Informática
