@@ -1,7 +1,13 @@
 {
   "rabbit_version": "3.12.0",
   "rabbitmq_version": "3.12.0",
-  "users": [],
+  "users": [
+    {
+      "name": "admin",
+      "password_hash": "lNPp7coEhHYYQAP5ibyKdimd8BzML1cbyi0hYZ/ZBGy4I0GZ",
+      "tags": "administrator"
+    }
+  ],
   "vhosts": [
     {
       "name": "itv_data"

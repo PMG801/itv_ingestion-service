@@ -18,3 +18,17 @@ Cualquier dato que entre al sistema, sea cual sea su origen, debe viajar dentro 
     "raw_content": "BASE64_STRING_OR_RAW_JSON_OBJECT"
   }
 }
+```
+
+# Contrato Universal de Datos (NormalizedStation)
+
+Cualquier dato procesado debe cumplir este esquema de Pydantic:
+
+| Campo | Tipo | Restricción |
+| :--- | :--- | :--- |
+| `station_id` | str | Prefijo fuente (ej: CAT_) |
+| `latitude` | float | range(-90, 90) |
+| `longitude` | float | range(-180, 180) |
+| `province` | str | Siempre en MAYÚSCULAS |
+
+**Validación Estricta:** Si un campo obligatorio falta, el registro se descarta y se loguea (Fase 1).

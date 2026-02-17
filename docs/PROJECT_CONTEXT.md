@@ -15,3 +15,15 @@ Aunque el caso de uso actual es **Estaciones de ITV**, el sistema debe ser **agn
 2.  **Gateway (Ingestion Service):** Recibe datos -> Empaqueta en "Mensaje Universal" -> Publica en RabbitMQ (`exchange: raw_data`).
 3.  **Normalizer (Worker):** Consume de RabbitMQ -> Detecta Dominio -> Aplica Estrategia de Normalización -> Publica en `exchange: normalized_data`.
 4.  **Persister (Worker):** Guarda en PostgreSQL/PostGIS.
+
+# Diseño del Sistema ITV Backend
+
+## Flujo de Datos
+1. **Gateway**: Recibe POST en `/ingest/{source}`. Envía el payload RAW a la cola `raw_data_queue`.
+2. **Normalizer**: Consume de `raw_data_queue`. Valida contra `NormalizedStation` (Pydantic). Envía a `normalized_data_queue`.
+3. **Persister**: Consume de `normalized_data_queue`. Realiza el UPSERT en PostgreSQL.
+
+## Infraestructura (QoS)
+Todos los servicios tienen límites definidos en `docker-compose.yml`:
+- **Normalizer**: CPU 1.0 (Limit), 0.5 (Reservation) para asegurar rendimiento en transformaciones pesadas.
+- **RabbitMQ/Postgres**: Reservas de 256MB RAM para estabilidad.
