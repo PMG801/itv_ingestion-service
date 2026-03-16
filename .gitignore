@@ -3,6 +3,7 @@ __pypackages__/
 .pdm.toml
 .pdm-python
 .pdm-build/
+.pdm-cache/
 pdm.lock
 
 # Git - Archivos ignorados
@@ -55,6 +56,8 @@ env/
 # Testing
 .pytest_cache/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
 *.cover
 .hypothesis/
@@ -67,10 +70,30 @@ htmlcov/
 *.sqlite
 *.sqlite3
 
+# Alembic (mantener migraciones y alembic.ini versionados)
+alembic.local.ini
+alembic.ini.local
+
 # Temporary files
 *.tmp
 *.bak
 *.orig
+.cache/
+
+# Python env/version managers
+.python-version
+.direnv/
+.envrc
+
+# Python tooling
+.tox/
+.nox/
+.pyre/
+.pytype/
+.pyright/
+
+# Notebooks
+.ipynb_checkpoints/
 
 # Ruff
 .ruff_cache/

@@ -8,6 +8,7 @@ and publishing persistent messages.
 
 import json
 import logging
+import socket
 from typing import Dict, Optional, Any
 from contextlib import asynccontextmanager
 
@@ -83,15 +84,29 @@ class RabbitMQClient:
             aio_pika.exceptions.AMQPException: If connection fails.
         """
         try:
+            # Get container/hostname for connection traceability
+            container_name = socket.gethostname()
+            connection_name = f"{settings.APP_NAME}-{container_name}"
+            
             logger.info(
-                f"Connecting to RabbitMQ at {settings.rabbitmq_host}:"
-                f"{settings.rabbitmq_port}/{settings.rabbitmq_vhost}"
+                f"Connecting to RabbitMQ at {settings.RABBITMQ_HOST}:"
+                f"{settings.RABBITMQ_PORT}/{settings.RABBITMQ_VHOST} "
+                f"with connection_name: {connection_name}"
             )
 
             # Create robust connection (auto-reconnect on failure)
+            # The connection_name parameter sets the client connection name in RabbitMQ
             self.connection = await aio_pika.connect_robust(
-                url=settings.rabbitmq_url,
+                host=settings.RABBITMQ_HOST,
+                port=settings.RABBITMQ_PORT,
+                login=settings.RABBITMQ_USER,
+                password=settings.RABBITMQ_PASS,
+                virtualhost=settings.RABBITMQ_VHOST,
+                client_properties={
+                    "connection_name": connection_name,
+                },
                 timeout=10,
+                connection_name=connection_name,  # This sets the visible name in RabbitMQ management
             )
 
             # Open channel
@@ -295,4 +310,11 @@ class RabbitMQClient:
             and self.channel is not None
             and not self.channel.is_closed
         )
+
+
+# Export consumer for convenience
+from core.messaging.consumer import RabbitMQConsumer  # noqa: E402
+
+__all__ = ["RabbitMQClient", "RabbitMQConsumer"]
+
 

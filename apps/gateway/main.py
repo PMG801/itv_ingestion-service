@@ -18,7 +18,7 @@ from core.database import dispose_engine
 
 # Configure logging
 logging.basicConfig(
-    level=getattr(logging, settings.log_level.upper()),
+    level=getattr(logging, settings.LOG_LEVEL.upper()),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         None: Control to the application during its runtime.
     """
     # Startup: Initialize connections
-    logger.info(f"Starting {settings.app_name}...")
+    logger.info(f"Starting {settings.APP_NAME}...")
     
     try:
         # Initialize RabbitMQ client
@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # Store settings in app state for easy access
         app.state.settings = settings
         
-        logger.info(f"{settings.app_name} started successfully")
+        logger.info(f"{settings.APP_NAME} started successfully")
         
     except Exception as e:
         logger.error(f"Failed to initialize application: {e}", exc_info=True)
@@ -60,7 +60,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield  # Application runs here
     
     # Shutdown: Cleanup connections
-    logger.info(f"Shutting down {settings.app_name}...")
+    logger.info(f"Shutting down {settings.APP_NAME}...")
     
     try:
         # Disconnect RabbitMQ
@@ -72,7 +72,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await dispose_engine()
         logger.info("Database engine disposed")
         
-        logger.info(f"{settings.app_name} shutdown complete")
+        logger.info(f"{settings.APP_NAME} shutdown complete")
         
     except Exception as e:
         logger.error(f"Error during shutdown: {e}", exc_info=True)
