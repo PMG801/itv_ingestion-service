@@ -52,6 +52,7 @@ dev = [
     "black>=23.12.0",
     "ruff>=0.1.9",
     "mypy>=1.8.0",
+    "basedpyright>=1.38.2",
 ]
 
 [build-system]
@@ -159,3 +160,17 @@ ignore_missing_imports = true
 module = "tests.*"
 disallow_untyped_defs = false
 disallow_untyped_calls = false
+
+[tool.basedpyright]
+typeCheckingMode = "strict"  
+pythonVersion = "3.12"       # Ajusta a tu versión de Python
+
+reportImplicitAny = true          # No permite 'Any' si no lo defines explícitamente
+reportUnusedImport = true         # Mantenimiento de limpieza
+reportUnusedVariable = true       # Evita basura en el código
+reportMissingTypeStubs = false    # Evita ruido de librerías externas sin tipos
+reportUnknownMemberType = false   # Reduce el ruido en llamadas a librerías de terceros
+reportUnknownArgumentType = false # Idem para argumentos
+
+# Configuración de entorno
+analysisExclusionRules = ["**/node_modules", "**/__pycache__", ".venv"]
