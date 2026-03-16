@@ -5,11 +5,13 @@ Defines data contracts for the ingestion API endpoints, including message
 formats and response models.
 """
 
-from datetime import datetime
-from typing import Union, Literal
+from datetime import datetime, timezone
+from typing import Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, field_validator
+
+PayloadDict = dict[str, object]
 
 
 class RawIngestionMessage(BaseModel):
@@ -37,7 +39,7 @@ class RawIngestionMessage(BaseModel):
         description="Data source identifier",
         examples=["catalunya", "valencia", "galicia"],
     )
-    payload: Union[dict, str] = Field(
+    payload: PayloadDict | str = Field(
         ...,
         description="Raw data payload (JSON object or string for XML/CSV)",
     )
@@ -47,7 +49,7 @@ class RawIngestionMessage(BaseModel):
         examples=["json", "xml", "csv"],
     )
     ingested_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="Ingestion timestamp (UTC)",
     )
 
@@ -92,7 +94,7 @@ class IngestRequest(BaseModel):
         format: Data format (defaults to json, can be xml or csv).
     """
 
-    payload: Union[dict, str] = Field(
+    payload: PayloadDict | str = Field(
         ...,
         description="Raw data to ingest",
     )
@@ -137,7 +139,7 @@ class IngestResponse(BaseModel):
         description="Message status",
     )
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="Response timestamp (UTC)",
     )
     message: str = Field(
@@ -175,7 +177,7 @@ class ErrorResponse(BaseModel):
         description="Detailed error message",
     )
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="Error timestamp (UTC)",
     )
 

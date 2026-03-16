@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Messaging module - RabbitMQ async connection and publishing.
 
@@ -9,20 +11,15 @@ and publishing persistent messages.
 import json
 import logging
 import socket
-from typing import Dict, Optional, Any
-from contextlib import asynccontextmanager
+from typing import Any
 
 import aio_pika
 from aio_pika import (
-    Connection,
-    Channel,
-    Exchange,
-    Queue,
     DeliveryMode,
     Message,
     ExchangeType,
 )
-from aio_pika.abc import AbstractRobustConnection
+from aio_pika.abc import AbstractChannel, AbstractExchange, AbstractQueue, AbstractRobustConnection
 
 from core.config import settings
 
@@ -43,13 +40,15 @@ class RabbitMQClient:
         queues: Dictionary of declared queues.
     """
 
-    _instance: Optional["RabbitMQClient"] = None
+    _instance: RabbitMQClient | None = None
+    _initialized: bool
 
     def __new__(cls) -> "RabbitMQClient":
         """Ensure only one instance exists (Singleton pattern)."""
         if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
+            instance = super().__new__(cls)
+            instance._initialized = False
+            cls._instance = instance
         return cls._instance
 
     def __init__(self) -> None:
@@ -57,11 +56,16 @@ class RabbitMQClient:
         if self._initialized:
             return
 
-        self.connection: Optional[AbstractRobustConnection] = None
-        self.channel: Optional[Channel] = None
-        self.exchanges: Dict[str, Exchange] = {}
-        self.queues: Dict[str, Queue] = {}
+        self.connection: AbstractRobustConnection | None = None
+        self.channel: AbstractChannel | None = None
+        self.exchanges: dict[str, AbstractExchange] = {}
+        self.queues: dict[str, AbstractQueue] = {}
         self._initialized = True
+
+    def _require_channel(self) -> AbstractChannel:
+        if self.channel is None:
+            raise RuntimeError("RabbitMQ channel is not initialized")
+        return self.channel
 
     async def connect(self) -> None:
         """
@@ -111,7 +115,7 @@ class RabbitMQClient:
 
             # Open channel
             self.channel = await self.connection.channel()
-            await self.channel.set_qos(prefetch_count=10)
+            await self._require_channel().set_qos(prefetch_count=10)
 
             logger.info("Successfully connected to RabbitMQ")
 
@@ -130,9 +134,10 @@ class RabbitMQClient:
         side effects. RabbitMQ will not recreate existing resources.
         """
         logger.info("Declaring RabbitMQ topology...")
+        channel = self._require_channel()
 
         # Declare Dead Letter Exchange (DLX) first
-        dlx_exchange = await self.channel.declare_exchange(
+        dlx_exchange = await channel.declare_exchange(
             name="dlx",
             type=ExchangeType.TOPIC,
             durable=True,
@@ -141,7 +146,7 @@ class RabbitMQClient:
         logger.debug("Declared Dead Letter Exchange (dlx)")
 
         # Declare main exchanges
-        raw_data_exchange = await self.channel.declare_exchange(
+        raw_data_exchange = await channel.declare_exchange(
             name="raw_data",
             type=ExchangeType.TOPIC,
             durable=True,
@@ -149,7 +154,7 @@ class RabbitMQClient:
         self.exchanges["raw_data"] = raw_data_exchange
         logger.debug("Declared exchange: raw_data (topic, durable)")
 
-        normalized_data_exchange = await self.channel.declare_exchange(
+        normalized_data_exchange = await channel.declare_exchange(
             name="normalized_data",
             type=ExchangeType.TOPIC,
             durable=True,
@@ -158,14 +163,14 @@ class RabbitMQClient:
         logger.debug("Declared exchange: normalized_data (topic, durable)")
 
         # Declare Dead Letter Queues (DLQ) - no DLX for DLQs themselves
-        dlq_raw = await self.channel.declare_queue(
+        dlq_raw = await channel.declare_queue(
             name="dlq.raw_data.itv_stations",
             durable=True,
         )
         self.queues["dlq.raw_data.itv_stations"] = dlq_raw
         logger.debug("Declared DLQ: dlq.raw_data.itv_stations")
 
-        dlq_normalized = await self.channel.declare_queue(
+        dlq_normalized = await channel.declare_queue(
             name="dlq.normalized_data.itv_stations",
             durable=True,
         )
@@ -183,7 +188,7 @@ class RabbitMQClient:
         )
 
         # Declare main queues with DLX configuration
-        raw_queue = await self.channel.declare_queue(
+        raw_queue = await channel.declare_queue(
             name="raw_data.itv_stations",
             durable=True,
             arguments={
@@ -194,7 +199,7 @@ class RabbitMQClient:
         self.queues["raw_data.itv_stations"] = raw_queue
         logger.debug("Declared queue: raw_data.itv_stations (durable, with DLX)")
 
-        normalized_queue = await self.channel.declare_queue(
+        normalized_queue = await channel.declare_queue(
             name="normalized_data.itv_stations",
             durable=True,
             arguments={
@@ -222,7 +227,7 @@ class RabbitMQClient:
 
     async def publish(
         self,
-        message: Dict[str, Any],
+        message: dict[str, Any],
         exchange_name: str,
         routing_key: str,
     ) -> None:
@@ -241,7 +246,7 @@ class RabbitMQClient:
             ValueError: If exchange doesn't exist or channel not initialized.
             aio_pika.exceptions.AMQPException: If publish fails.
         """
-        if not self.channel or not self.connection:
+        if self.channel is None or self.connection is None:
             raise ValueError("RabbitMQ client not connected. Call connect() first.")
 
         if exchange_name not in self.exchanges:

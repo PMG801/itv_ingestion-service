@@ -162,15 +162,13 @@ disallow_untyped_defs = false
 disallow_untyped_calls = false
 
 [tool.basedpyright]
-typeCheckingMode = "strict"  
-pythonVersion = "3.12"       # Ajusta a tu versión de Python
-
-reportImplicitAny = true          # No permite 'Any' si no lo defines explícitamente
-reportUnusedImport = true         # Mantenimiento de limpieza
-reportUnusedVariable = true       # Evita basura en el código
-reportMissingTypeStubs = false    # Evita ruido de librerías externas sin tipos
-reportUnknownMemberType = false   # Reduce el ruido en llamadas a librerías de terceros
-reportUnknownArgumentType = false # Idem para argumentos
-
-# Configuración de entorno
-analysisExclusionRules = ["**/node_modules", "**/__pycache__", ".venv"]
+typeCheckingMode = "strict"
+pythonVersion = "3.12"
+venvPath = "."
+venv = "venv"
+reportUnusedImport = true
+reportUnusedVariable = true
+reportMissingTypeStubs = false
+reportUnknownMemberType = false
+reportUnknownArgumentType = false
+exclude = ["**/node_modules", "**/__pycache__", ".venv", "venv"]

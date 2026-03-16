@@ -9,8 +9,7 @@ asynchronous processing.
 import logging
 from typing import Literal
 
-from fastapi import APIRouter, Request, HTTPException, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, HTTPException, Request, status
 
 from apps.gateway.schemas import (
     IngestRequest,
@@ -24,7 +23,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Valid data sources
-VALID_SOURCES = ["catalunya", "valencia", "galicia"]
+VALID_SOURCES: list[Literal["catalunya", "valencia", "galicia"]] = [
+    "catalunya",
+    "valencia",
+    "galicia",
+]
 
 
 @router.post(
@@ -77,7 +80,7 @@ async def ingest_data(
         HTTPException 503: If RabbitMQ is unavailable.
     """
     # Normalize source to lowercase
-    source_lower = source.lower()
+    source_lower: Literal["catalunya", "valencia", "galicia"] = source
     
     # Validate source
     if source_lower not in VALID_SOURCES:
@@ -155,7 +158,7 @@ async def ingest_data(
     description="Returns the list of valid data sources that can be ingested",
     response_model=dict,
 )
-async def list_sources():
+async def list_sources() -> dict[str, object]:
     """
     List valid ingestion sources.
     

@@ -11,7 +11,7 @@ class ITVValidationRules:
     SPAIN_LON_MAX = 4.3
 
     @classmethod
-    def validate_coordinates(cls, latitude: float, longitude: float) -> bool:
+    def validate_coordinates(cls, latitude: float | None, longitude: float | None) -> bool:
         """
         Validate if coordinates are within Spain boundaries.
 

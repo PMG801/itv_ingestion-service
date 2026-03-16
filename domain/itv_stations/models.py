@@ -5,7 +5,7 @@ Este módulo define los modelos de base de datos usando SQLAlchemy 2.0.
 Todos los modelos heredan de Base (DeclarativeBase) y residen en el schema 'itv'.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import (
@@ -14,7 +14,6 @@ from sqlalchemy import (
     Float,
     Integer,
     DateTime,
-    Index,
     UniqueConstraint,
     CheckConstraint,
 )
@@ -135,7 +134,7 @@ class EstacionITV(Base):
     )
     
     # Datos adicionales flexibles (JSONB)
-    datos_extra: Mapped[Optional[dict]] = mapped_column(
+    datos_extra: Mapped[Optional[dict[str, object]]] = mapped_column(
         JSONB,
         nullable=True,
         comment="Campos adicionales no mapeados en estructura JSON"
@@ -145,14 +144,14 @@ class EstacionITV(Base):
     fecha_creacion: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
         comment="Fecha de creación del registro"
     )
     fecha_actualizacion: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
         comment="Fecha de última actualización (auto-gestionado por trigger)"
     )
     
@@ -235,7 +234,7 @@ class IngestionLog(Base):
     processed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
         comment="Fecha y hora de procesamiento"
     )
     

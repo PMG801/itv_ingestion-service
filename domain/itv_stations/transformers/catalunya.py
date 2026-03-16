@@ -6,7 +6,8 @@ Handles XML format data from Catalunya's ITV system.
 
 import logging
 import xml.etree.ElementTree as ET
-from typing import List, Any, Union, Dict
+from collections.abc import Mapping
+from typing import Any
 
 from domain.itv_stations.transformers.base import BaseTransformer
 from domain.itv_stations.schemas import NormalizedStation
@@ -42,7 +43,7 @@ class CatalunyaTransformer(BaseTransformer):
         """Initialize Catalunya transformer."""
         super().__init__(source_system="catalunya")
     
-    def transform(self, raw_payload: Any) -> List[NormalizedStation]:
+    def transform(self, raw_payload: Any) -> list[NormalizedStation]:
         """
         Parse Catalunya XML and extract ITV stations.
         
@@ -62,6 +63,9 @@ class CatalunyaTransformer(BaseTransformer):
         # Handle list of dicts (for testing with multiple stations)
         if isinstance(raw_payload, list):
             return self._transform_list(raw_payload)
+
+        if not isinstance(raw_payload, str):
+            raise ValueError(f"Expected XML string, dict or list, got {type(raw_payload)}")
         
         # Parse XML string
         try:
@@ -70,7 +74,7 @@ class CatalunyaTransformer(BaseTransformer):
             logger.error(f"Failed to parse Catalunya XML: {e}")
             raise ValueError(f"Invalid XML format: {e}")
         
-        stations = []
+        stations: list[NormalizedStation] = []
         
         # Find all station elements
         for station_elem in root.findall("station"):
@@ -106,29 +110,27 @@ class CatalunyaTransformer(BaseTransformer):
             return None
         
         # Extract and normalize data
-        station_data = {
-            "station_id": self._generate_station_id(raw_id),
-            "name": elem.findtext("nom", "").strip(),
-            "address": elem.findtext("adreca"),
-            "city": elem.findtext("ciutat"),
-            "province": elem.findtext("provincia"),
-            "postal_code": self._clean_postal_code(elem.findtext("codi_postal")),
-            "latitude": self._parse_float(elem.findtext("latitud")),
-            "longitude": self._parse_float(elem.findtext("longitud")),
-            "phone": self._clean_phone(elem.findtext("telefon")),
-            "email": elem.findtext("email"),
-            "source_system": self.source_system,
-            "raw_id": raw_id,
-        }
-        
         # Validate and create NormalizedStation
         try:
-            return NormalizedStation(**station_data)
+            return NormalizedStation(
+                station_id=self._generate_station_id(raw_id),
+                name=elem.findtext("nom", "").strip(),
+                address=self._as_optional_str(elem.findtext("adreca")),
+                city=self._as_optional_str(elem.findtext("ciutat")),
+                province=self._as_optional_str(elem.findtext("provincia")),
+                postal_code=self._clean_postal_code(elem.findtext("codi_postal")),
+                latitude=self._parse_float(elem.findtext("latitud")),
+                longitude=self._parse_float(elem.findtext("longitud")),
+                phone=self._clean_phone(self._as_optional_str(elem.findtext("telefon"))),
+                email=self._as_optional_str(elem.findtext("email")),
+                source_system="catalunya",
+                raw_id=raw_id,
+            )
         except Exception as e:
             logger.error(f"Validation failed for station {raw_id}: {e}")
             return None
     
-    def _transform_dict(self, payload: Dict) -> List[NormalizedStation]:
+    def _transform_dict(self, payload: Mapping[str, object]) -> list[NormalizedStation]:
         """
         Transform dict payload (for testing or JSON-like data).
         
@@ -145,16 +147,19 @@ class CatalunyaTransformer(BaseTransformer):
         
         # Handle multiple stations
         if "stations" in payload:
-            return self._transform_list(payload["stations"])
+            stations = payload["stations"]
+            if isinstance(stations, list):
+                return self._transform_list(stations)
+            return []
         
         # Handle list at root
-        if isinstance(payload, dict) and len(payload) == 0:
+        if len(payload) == 0:
             return []
         
         logger.warning(f"Unexpected Catalunya payload structure: {payload.keys()}")
         return []
     
-    def _transform_list(self, stations_list: List[Dict]) -> List[NormalizedStation]:
+    def _transform_list(self, stations_list: list[object]) -> list[NormalizedStation]:
         """
         Transform list of station dictionaries.
         
@@ -164,21 +169,24 @@ class CatalunyaTransformer(BaseTransformer):
         Returns:
             List of NormalizedStation objects.
         """
-        stations = []
+        stations: list[NormalizedStation] = []
         
         for station_dict in stations_list:
+            if not isinstance(station_dict, dict):
+                logger.warning("Skipping Catalunya station with invalid payload type")
+                continue
             try:
                 station = self._transform_dict_station(station_dict)
                 if station:
                     stations.append(station)
             except Exception as e:
-                raw_id = station_dict.get("id", "unknown")
+                raw_id = self._as_optional_str(station_dict.get("id")) or "unknown"
                 logger.warning(f"Failed to transform station {raw_id}: {e}")
                 continue
         
         return stations
     
-    def _transform_dict_station(self, data: Dict) -> NormalizedStation | None:
+    def _transform_dict_station(self, data: Mapping[str, object]) -> NormalizedStation | None:
         """
         Transform a single station dictionary to NormalizedStation.
         
@@ -188,30 +196,28 @@ class CatalunyaTransformer(BaseTransformer):
         Returns:
             NormalizedStation object or None if validation fails.
         """
-        raw_id = data.get("id", "").strip()
+        raw_id = self._as_optional_str(data.get("id")) or ""
         
         if not raw_id:
             logger.warning("Skipping station without ID")
             return None
         
         # Map Catalan field names to normalized schema
-        station_data = {
-            "station_id": self._generate_station_id(raw_id),
-            "name": data.get("nom", "").strip(),
-            "address": data.get("adreca"),
-            "city": data.get("ciutat"),
-            "province": data.get("provincia"),
-            "postal_code": self._clean_postal_code(data.get("codi_postal")),
-            "latitude": self._parse_float(data.get("latitud")),
-            "longitude": self._parse_float(data.get("longitud")),
-            "phone": self._clean_phone(data.get("telefon")),
-            "email": data.get("email"),
-            "source_system": self.source_system,
-            "raw_id": raw_id,
-        }
-        
         try:
-            return NormalizedStation(**station_data)
+            return NormalizedStation(
+                station_id=self._generate_station_id(raw_id),
+                name=self._as_optional_str(data.get("nom")) or "",
+                address=self._as_optional_str(data.get("adreca")),
+                city=self._as_optional_str(data.get("ciutat")),
+                province=self._as_optional_str(data.get("provincia")),
+                postal_code=self._clean_postal_code(self._as_optional_str(data.get("codi_postal"))),
+                latitude=self._parse_float(data.get("latitud")),
+                longitude=self._parse_float(data.get("longitud")),
+                phone=self._clean_phone(self._as_optional_str(data.get("telefon"))),
+                email=self._as_optional_str(data.get("email")),
+                source_system="catalunya",
+                raw_id=raw_id,
+            )
         except Exception as e:
             logger.error(f"Validation failed for station {raw_id}: {e}")
             return None

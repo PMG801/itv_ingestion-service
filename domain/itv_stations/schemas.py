@@ -5,7 +5,7 @@ This model represents the standardized format for ITV station data after
 normalization, regardless of the source system.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Literal
 from pydantic import BaseModel, Field, field_validator
 
@@ -106,7 +106,7 @@ class NormalizedStation(BaseModel):
         max_length=100,
     )
     normalized_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="Timestamp when normalization occurred (UTC)",
     )
     

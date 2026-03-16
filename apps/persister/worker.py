@@ -9,13 +9,11 @@ Este worker es el último paso del pipeline:
 4. Registra en ingestion_log el resultado del procesamiento
 """
 import asyncio
-import logging
 import json
-from typing import Optional
+import logging
 
-from aio_pika import connect_robust, Message
-from aio_pika.abc import AbstractIncomingMessage
-from sqlalchemy import select
+from aio_pika import connect_robust
+from aio_pika.abc import AbstractChannel, AbstractIncomingMessage, AbstractRobustConnection
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -39,9 +37,18 @@ class PersisterWorker:
     def __init__(self):
         self.rabbitmq_url = settings.RABBITMQ_URL
         self.queue_name = "normalized_data_queue"
-        self.connection = None
-        self.channel = None
+        self.connection: AbstractRobustConnection | None = None
+        self.channel: AbstractChannel | None = None
         self._running = False
+
+    @property
+    def is_running(self) -> bool:
+        return self._running
+
+    def _require_channel(self) -> AbstractChannel:
+        if self.channel is None:
+            raise RuntimeError("RabbitMQ channel is not initialized")
+        return self.channel
     
     async def connect_rabbitmq(self) -> None:
         """Establece conexión con RabbitMQ."""
@@ -70,6 +77,8 @@ class PersisterWorker:
                 # ================================================================
                 body = message.body.decode("utf-8")
                 data = json.loads(body)
+                if not isinstance(data, dict):
+                    raise ValueError("Normalized message payload must be a JSON object")
                 
                 logger.debug(f"Procesando mensaje {message_id}: {data.get('station_id')}")
                 
@@ -179,7 +188,8 @@ class PersisterWorker:
         await self.connect_rabbitmq()
         
         # Declarar la cola (debe existir, creada por el Normalizer o configuración)
-        queue = await self.channel.declare_queue(
+        channel = self._require_channel()
+        queue = await channel.declare_queue(
             self.queue_name,
             durable=True,
             arguments={
@@ -217,7 +227,7 @@ async def main():
         await worker.start_consuming()
         
         # Mantener el worker corriendo hasta Ctrl+C
-        while worker._running:
+        while worker.is_running:
             await asyncio.sleep(1)
     
     except KeyboardInterrupt:

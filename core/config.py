@@ -1,8 +1,5 @@
-"""
-Configuración centralizada de la aplicación usando Pydantic Settings.
-Lee variables de entorno y provee valores por defecto.
-"""
-from typing import Optional
+"""Configuración centralizada de la aplicación usando Pydantic Settings."""
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 

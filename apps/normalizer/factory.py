@@ -6,7 +6,8 @@ based on the data source system.
 """
 
 import logging
-from typing import List
+from collections.abc import Callable
+from typing import ClassVar, cast
 
 from domain.itv_stations.transformers.base import BaseTransformer
 from domain.itv_stations.transformers.catalunya import CatalunyaTransformer
@@ -34,7 +35,7 @@ class TransformerFactory:
     """
     
     # Registry of available transformers
-    _transformers = {
+    _transformers: ClassVar[dict[str, Callable[[], BaseTransformer]]] = {
         "catalunya": CatalunyaTransformer,
         "valencia": ValenciaTransformer,
         "galicia": GaliciaTransformer,
@@ -62,9 +63,9 @@ class TransformerFactory:
         """
         source_lower = source_system.lower().strip()
         
-        transformer_class = cls._transformers.get(source_lower)
+        transformer_factory = cls._transformers.get(source_lower)
         
-        if not transformer_class:
+        if not transformer_factory:
             supported = ", ".join(cls._transformers.keys())
             error_msg = (
                 f"Unsupported source system: '{source_system}'. "
@@ -74,10 +75,10 @@ class TransformerFactory:
             raise ValueError(error_msg)
         
         logger.debug(f"Creating transformer for source: {source_lower}")
-        return transformer_class()
+        return transformer_factory()
     
     @classmethod
-    def supported_sources(cls) -> List[str]:
+    def supported_sources(cls) -> list[str]:
         """
         Get list of supported source systems.
         
@@ -94,7 +95,7 @@ class TransformerFactory:
     def register_transformer(
         cls,
         source_system: str,
-        transformer_class: type[BaseTransformer]
+        transformer_class: object,
     ) -> None:
         """
         Register a new transformer for a source system.
@@ -117,12 +118,14 @@ class TransformerFactory:
             >>> "madrid" in TransformerFactory.supported_sources()
             True
         """
-        # Validate that the class is a subclass of BaseTransformer
-        if not issubclass(transformer_class, BaseTransformer):
+        if not isinstance(transformer_class, type) or not issubclass(
+            transformer_class, BaseTransformer
+        ):
             raise TypeError(
-                f"{transformer_class.__name__} must inherit from BaseTransformer"
+                f"{getattr(transformer_class, '__name__', type(transformer_class).__name__)} "
+                "must inherit from BaseTransformer"
             )
-        
+
         source_lower = source_system.lower().strip()
         
         if source_lower in cls._transformers:
@@ -130,7 +133,7 @@ class TransformerFactory:
                 f"Overwriting existing transformer for source: {source_lower}"
             )
         
-        cls._transformers[source_lower] = transformer_class
+        cls._transformers[source_lower] = cast(Callable[[], BaseTransformer], transformer_class)
         logger.info(f"Registered transformer for source: {source_lower}")
     
     @classmethod

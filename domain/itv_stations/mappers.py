@@ -1,18 +1,10 @@
-"""
-Mappers for transforming Pydantic schemas to SQLAlchemy ORM models.
+"""Mappers for transforming Pydantic schemas to SQLAlchemy ORM models."""
 
-Este módulo contiene la lógica de transformación entre:
-- NormalizedStation (Pydantic schema) → EstacionITV (SQLAlchemy ORM)
-
-Incluye conversión de coordenadas a geometría PostGIS y extracción
-de campos no mapeados al campo JSONB datos_extra.
-"""
-
-from typing import Optional
-from datetime import datetime
+from collections.abc import Mapping
+from datetime import datetime, timezone
 
 from shapely.geometry import Point
-from geoalchemy2.shape import from_shape
+from geoalchemy2.shape import from_shape  # pyright: ignore[reportUnknownVariableType]
 
 from .schemas import NormalizedStation
 from .models import EstacionITV
@@ -20,7 +12,7 @@ from .models import EstacionITV
 
 def normalized_station_to_orm(
     schema: NormalizedStation,
-    datos_extra_adicionales: Optional[dict] = None
+    datos_extra_adicionales: Mapping[str, object] | None = None,
 ) -> EstacionITV:
     """
     Convierte un NormalizedStation (Pydantic) a EstacionITV (ORM).
@@ -67,7 +59,7 @@ def normalized_station_to_orm(
     # ========================================================================
     # Guardamos campos que NO están mapeados en columnas dedicadas
     # En este caso, guardamos todo excepto los que ya tenemos en columnas
-    datos_extra = {
+    datos_extra: dict[str, object] = {
         # Snapshot completo del objeto normalizado (para auditoría)
         "normalized_snapshot": schema.model_dump(mode="json"),
         # Timestamp de normalización original
@@ -88,6 +80,8 @@ def normalized_station_to_orm(
     if datos_extra_adicionales:
         datos_extra.update(datos_extra_adicionales)
     
+    now = datetime.now(timezone.utc)
+
     # ========================================================================
     # 3. Construir instancia ORM
     # ========================================================================
@@ -116,14 +110,14 @@ def normalized_station_to_orm(
         datos_extra=datos_extra,
         
         # Timestamps (fecha_creacion tendrá default, fecha_actualizacion por trigger)
-        fecha_creacion=datetime.utcnow(),
-        fecha_actualizacion=datetime.utcnow(),
+        fecha_creacion=now,
+        fecha_actualizacion=now,
     )
     
     return estacion
 
 
-def extract_datos_no_mapeados(schema: NormalizedStation) -> dict:
+def extract_datos_no_mapeados(schema: NormalizedStation) -> dict[str, object]:
     """
     Extrae campos de NormalizedStation que NO tienen columna dedicada.
     

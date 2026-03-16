@@ -10,8 +10,7 @@ import json
 from typing import Callable, Awaitable, Any
 
 import aio_pika
-from aio_pika import IncomingMessage, Message
-from aio_pika.abc import AbstractRobustConnection, AbstractChannel
+from aio_pika.abc import AbstractChannel, AbstractIncomingMessage, AbstractRobustConnection
 
 from core.config import settings
 
@@ -71,7 +70,7 @@ class RabbitMQConsumer:
     async def consume(
         self,
         queue_name: str,
-        callback: Callable[[dict], Awaitable[None]],
+        callback: Callable[[dict[str, Any]], Awaitable[None]],
         auto_ack: bool = False,
         arguments: dict[str, Any] | None = None,
     ) -> None:
@@ -108,13 +107,14 @@ class RabbitMQConsumer:
             ... }
             >>> await consumer.consume("my_queue", process_message, arguments=dlx_args)
         """
-        if not self.channel:
+        if self.channel is None:
             raise RuntimeError("Consumer not connected. Call connect() first.")
+        channel = self.channel
         
         try:
             # Declare queue (idempotent - won't recreate if exists)
             # Must use same arguments as original queue declaration
-            queue = await self.channel.declare_queue(
+            queue = await channel.declare_queue(
                 queue_name,
                 durable=True,
                 arguments=arguments,
@@ -124,7 +124,7 @@ class RabbitMQConsumer:
             
             # Consume messages
             async with queue.iterator() as queue_iter:
-                message: IncomingMessage
+                message: AbstractIncomingMessage
                 async for message in queue_iter:
                     await self._process_message(
                         message=message,
@@ -138,8 +138,8 @@ class RabbitMQConsumer:
     
     async def _process_message(
         self,
-        message: IncomingMessage,
-        callback: Callable[[dict], Awaitable[None]],
+        message: AbstractIncomingMessage,
+        callback: Callable[[dict[str, Any]], Awaitable[None]],
         auto_ack: bool,
     ) -> None:
         """
@@ -153,6 +153,8 @@ class RabbitMQConsumer:
         try:
             # Deserialize JSON payload
             payload = json.loads(message.body.decode("utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError("RabbitMQ message payload must be a JSON object")
             
             logger.debug(
                 f"Received message: {payload.get('message_id', 'unknown')} "

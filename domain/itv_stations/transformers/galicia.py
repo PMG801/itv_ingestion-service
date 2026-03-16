@@ -6,8 +6,9 @@ Handles CSV format data from Galicia's ITV system.
 
 import logging
 import csv
+from collections.abc import Mapping
 from io import StringIO
-from typing import List, Any, Dict
+from typing import Any, cast
 
 from domain.itv_stations.transformers.base import BaseTransformer
 from domain.itv_stations.schemas import NormalizedStation
@@ -42,7 +43,7 @@ class GaliciaTransformer(BaseTransformer):
         """Initialize Galicia transformer."""
         super().__init__(source_system="galicia")
     
-    def transform(self, raw_payload: Any) -> List[NormalizedStation]:
+    def transform(self, raw_payload: Any) -> list[NormalizedStation]:
         """
         Parse Galicia CSV and extract ITV stations.
         
@@ -61,12 +62,15 @@ class GaliciaTransformer(BaseTransformer):
         
         # Handle single dict (for testing)
         if isinstance(raw_payload, dict):
-            if "stations" in raw_payload or "estaciones" in raw_payload:
-                stations_list = raw_payload.get("stations") or raw_payload.get("estaciones")
-                return self._transform_list(stations_list)
+            payload_dict = cast(dict[str, object], raw_payload)
+            if "stations" in payload_dict or "estaciones" in payload_dict:
+                stations_list_obj: object = payload_dict.get("stations") or payload_dict.get("estaciones")
+                if not isinstance(stations_list_obj, list):
+                    return []
+                return self._transform_list(stations_list_obj)
             else:
                 # Single station dict
-                station = self._transform_station(raw_payload)
+                station = self._transform_station(payload_dict)
                 return [station] if station else []
         
         # Handle CSV string
@@ -76,7 +80,7 @@ class GaliciaTransformer(BaseTransformer):
         logger.error(f"Invalid Galicia payload type: {type(raw_payload)}")
         raise ValueError(f"Expected string, list, or dict, got {type(raw_payload)}")
     
-    def _parse_csv(self, csv_string: str) -> List[NormalizedStation]:
+    def _parse_csv(self, csv_string: str) -> list[NormalizedStation]:
         """
         Parse CSV string and extract stations.
         
@@ -91,7 +95,7 @@ class GaliciaTransformer(BaseTransformer):
             csv_file = StringIO(csv_string.strip())
             reader = csv.DictReader(csv_file)
             
-            stations = []
+            stations: list[NormalizedStation] = []
             for row in reader:
                 try:
                     station = self._transform_station(row)
@@ -109,7 +113,7 @@ class GaliciaTransformer(BaseTransformer):
             logger.error(f"Failed to parse Galicia CSV: {e}")
             raise ValueError(f"Invalid CSV format: {e}")
     
-    def _transform_list(self, stations_list: List[Dict]) -> List[NormalizedStation]:
+    def _transform_list(self, stations_list: list[object]) -> list[NormalizedStation]:
         """
         Transform list of station dictionaries.
         
@@ -119,22 +123,25 @@ class GaliciaTransformer(BaseTransformer):
         Returns:
             List of NormalizedStation objects.
         """
-        stations = []
+        stations: list[NormalizedStation] = []
         
         for station_dict in stations_list:
+            if not isinstance(station_dict, dict):
+                logger.warning("Skipping Galicia station with invalid payload type")
+                continue
             try:
                 station = self._transform_station(station_dict)
                 if station:
                     stations.append(station)
             except Exception as e:
-                raw_id = station_dict.get("id", "unknown")
+                raw_id = self._as_optional_str(station_dict.get("id")) or "unknown"
                 logger.warning(f"Failed to transform Galicia station {raw_id}: {e}")
                 continue
         
         logger.info(f"Transformed {len(stations)} stations from Galicia")
         return stations
     
-    def _transform_station(self, data: Dict) -> NormalizedStation | None:
+    def _transform_station(self, data: Mapping[str, object]) -> NormalizedStation | None:
         """
         Transform a single station dictionary to NormalizedStation.
         
@@ -145,12 +152,9 @@ class GaliciaTransformer(BaseTransformer):
             NormalizedStation object or None if validation fails.
         """
         # Get raw ID from various possible fields
-        raw_id = (
-            data.get("id") or
-            data.get("codigo") or
-            data.get("station_id") or
-            ""
-        ).strip()
+        raw_id = self._as_optional_str(
+            data.get("id") or data.get("codigo") or data.get("station_id")
+        ) or ""
         
         if not raw_id:
             logger.warning("Skipping Galicia station without ID")
@@ -158,58 +162,23 @@ class GaliciaTransformer(BaseTransformer):
         
         # Map Galician field names to normalized schema
         # Support both Galician and Spanish field names
-        station_data = {
-            "station_id": self._generate_station_id(raw_id),
-            "name": (
-                data.get("nome") or
-                data.get("nombre") or
-                data.get("name") or
-                ""
-            ).strip(),
-            "address": (
-                data.get("enderezo") or
-                data.get("direccion") or
-                data.get("address")
-            ),
-            "city": (
-                data.get("concello") or
-                data.get("poblacion") or
-                data.get("ciudad") or
-                data.get("city")
-            ),
-            "province": (
-                data.get("provincia") or
-                data.get("province")
-            ),
-            "postal_code": self._clean_postal_code(
-                data.get("cp") or
-                data.get("codigo_postal") or
-                data.get("postal_code")
-            ),
-            "latitude": self._parse_float(
-                data.get("lat") or
-                data.get("latitud") or
-                data.get("latitude")
-            ),
-            "longitude": self._parse_float(
-                data.get("lon") or
-                data.get("longitud") or
-                data.get("longitude")
-            ),
-            "phone": self._clean_phone(
-                data.get("telefono") or
-                data.get("phone")
-            ),
-            "email": (
-                data.get("email") or
-                data.get("correo")
-            ),
-            "source_system": self.source_system,
-            "raw_id": raw_id,
-        }
-        
         try:
-            return NormalizedStation(**station_data)
+            return NormalizedStation(
+                station_id=self._generate_station_id(raw_id),
+                name=self._as_optional_str(data.get("nome") or data.get("nombre") or data.get("name")) or "",
+                address=self._as_optional_str(data.get("enderezo") or data.get("direccion") or data.get("address")),
+                city=self._as_optional_str(data.get("concello") or data.get("poblacion") or data.get("ciudad") or data.get("city")),
+                province=self._as_optional_str(data.get("provincia") or data.get("province")),
+                postal_code=self._clean_postal_code(
+                    self._as_optional_str(data.get("cp") or data.get("codigo_postal") or data.get("postal_code"))
+                ),
+                latitude=self._parse_float(data.get("lat") or data.get("latitud") or data.get("latitude")),
+                longitude=self._parse_float(data.get("lon") or data.get("longitud") or data.get("longitude")),
+                phone=self._clean_phone(self._as_optional_str(data.get("telefono") or data.get("phone"))),
+                email=self._as_optional_str(data.get("email") or data.get("correo")),
+                source_system="galicia",
+                raw_id=raw_id,
+            )
         except Exception as e:
             logger.error(f"Validation failed for Galicia station {raw_id}: {e}")
             return None

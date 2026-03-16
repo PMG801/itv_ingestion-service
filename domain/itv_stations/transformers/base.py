@@ -6,7 +6,8 @@ transformers must implement to ensure consistent data transformation.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Any, Union, Dict
+from typing import Any
+
 from domain.itv_stations.schemas import NormalizedStation
 
 
@@ -36,7 +37,7 @@ class BaseTransformer(ABC):
         self.source_system = source_system.lower()
     
     @abstractmethod
-    def transform(self, raw_payload: Any) -> List[NormalizedStation]:
+    def transform(self, raw_payload: Any) -> list[NormalizedStation]:
         """
         Transform raw data from source to normalized format.
         
@@ -58,6 +59,18 @@ class BaseTransformer(ABC):
             Exception: For other transformation errors (logged but not re-raised).
         """
         pass
+
+    def _as_optional_str(self, value: object) -> str | None:
+        """Normalize arbitrary values to a trimmed string or ``None``."""
+        if value is None:
+            return None
+
+        if isinstance(value, str):
+            normalized = value.strip()
+            return normalized or None
+
+        normalized = str(value).strip()
+        return normalized or None
     
     def _generate_station_id(self, raw_id: str) -> str:
         """
