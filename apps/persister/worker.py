@@ -36,7 +36,7 @@ class PersisterWorker:
     
     def __init__(self):
         self.rabbitmq_url = settings.RABBITMQ_URL
-        self.queue_name = "normalized_data_queue"
+        self.queue_name = "normalized_data.itv_stations"
         self.connection: AbstractRobustConnection | None = None
         self.channel: AbstractChannel | None = None
         self._running = False
@@ -187,14 +187,15 @@ class PersisterWorker:
         """Inicia el consumo de mensajes de RabbitMQ."""
         await self.connect_rabbitmq()
         
-        # Declarar la cola (debe existir, creada por el Normalizer o configuración)
+        # Declarar la cola — los argumentos deben coincidir EXACTAMENTE con los
+        # usados al crearla (definitions.json), si no RabbitMQ lanza PRECONDITION_FAILED.
         channel = self._require_channel()
         queue = await channel.declare_queue(
             self.queue_name,
             durable=True,
             arguments={
-                "x-dead-letter-exchange": "dlx",  # Dead Letter Exchange
-                "x-message-ttl": 86400000,  # 24 horas TTL
+                "x-dead-letter-exchange": "dlx",
+                "x-dead-letter-routing-key": "dlx.normalized_data.itv_stations",
             }
         )
         
