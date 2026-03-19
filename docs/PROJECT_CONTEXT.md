@@ -13,15 +13,42 @@ Aunque el caso de uso actual es **Estaciones de ITV**, el sistema debe ser **agn
 ## Flujo de Datos (High Level)
 1.  **Source:** API Externa / Archivo (XML, JSON, CSV).
 2.  **Gateway (Ingestion Service):** Recibe datos -> Empaqueta en "Mensaje Universal" -> Publica en RabbitMQ (`exchange: raw_data`).
-3.  **Normalizer (Worker):** Consume de RabbitMQ -> Detecta Dominio -> Aplica Estrategia de Normalización -> Publica en `exchange: normalized_data`.
+3.  **Normalizer (Worker):** Consume de RabbitMQ -> Detecta Dominio -> Aplica Estrategia de Normalización -> Publica válidos en `exchange: normalized_data` y filtrados en `exchange: rejected_data`.
 4.  **Persister (Worker):** Guarda en PostgreSQL/PostGIS.
+
+## Estado actual de trazabilidad (Marzo 2026)
+
+### 1) Trazabilidad de mensaje end-to-end
+- El Gateway genera `message_id` único por petición de ingesta.
+- Ese `message_id` viaja por el pipeline y permite correlación en logs y workers.
+- El Persister registra resultado en `itv.ingestion_log` con estado `success`/`failed`.
+
+### 2) Trazabilidad de datos válidos
+- Los registros normalizados se publican en `normalized_data.itv_stations`.
+- El Persister hace UPSERT por `(fuente_origen, id_en_fuente)` para evitar duplicados.
+
+### 3) Trazabilidad de datos filtrados
+- El Normalizer ya no descarta silenciosamente:
+	- Si una estación no cumple reglas/validación, se publica un evento de rechazo.
+	- Si un mensaje completo no produce estaciones válidas, también se publica rechazo.
+- Destino: `exchange rejected_data` -> `queue rejected_data.itv_stations`.
+- Contrato mínimo de rechazo: `message_id`, `source`, `format`, `reason`, `rejection_level`, `raw_payload`, `rejected_at`.
+- En esta fase no existe consumidor de reintentos para esa cola: se retiene para trazabilidad y análisis futuro.
+
+### 4) Errores técnicos de mensajería
+- Se mantiene DLX/DLQ para fallos técnicos de consumo/procesamiento:
+	- `dlq.raw_data.itv_stations`
+	- `dlq.normalized_data.itv_stations`
+	- `dlq.rejected_data.itv_stations`
 
 # Diseño del Sistema ITV Backend
 
 ## Flujo de Datos
-1. **Gateway**: Recibe POST en `/ingest/{source}`. Envía el payload RAW a la cola `raw_data_queue`.
-2. **Normalizer**: Consume de `raw_data_queue`. Valida contra `NormalizedStation` (Pydantic). Envía a `normalized_data_queue`.
-3. **Persister**: Consume de `normalized_data_queue`. Realiza el UPSERT en PostgreSQL.
+1. **Gateway**: Recibe POST en `/ingest/{source}`. Publica en `raw_data.itv_stations`.
+2. **Normalizer**: Consume `raw_data.itv_stations`.
+	- Válidos -> `normalized_data.itv_stations`
+	- Filtrados -> `rejected_data.itv_stations`
+3. **Persister**: Consume `normalized_data.itv_stations`. Realiza UPSERT en PostgreSQL y log de ingestión.
 
 ## Infraestructura (QoS)
 Todos los servicios tienen límites definidos en `docker-compose.yml`:

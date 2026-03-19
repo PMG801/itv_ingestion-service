@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from typing import Any, cast
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -10,7 +11,7 @@ from domain.itv_stations.schemas import NormalizedStation
 
 
 def _build_station(base_payload: dict[str, object], *, station_id: str, raw_id: str) -> NormalizedStation:
-    payload = deepcopy(base_payload)
+    payload = cast(dict[str, Any], deepcopy(base_payload))
     payload["station_id"] = station_id
     payload["raw_id"] = raw_id
     return NormalizedStation(**payload)
@@ -47,6 +48,7 @@ async def test_process_message_transforms_and_publishes_every_station(
 async def test_process_message_accepts_empty_transformation_result() -> None:
     worker = NormalizerWorker()
     transformer = Mock(transform=Mock(return_value=[]))
+    transformer.rejected_items = []
     worker.factory = Mock(create=Mock(return_value=transformer))
     worker.publisher = Mock(publish=AsyncMock())
 
@@ -59,9 +61,90 @@ async def test_process_message_accepts_empty_transformation_result() -> None:
         }
     )
 
-    worker.publisher.publish.assert_not_called()
+    worker.publisher.publish.assert_awaited_once()
+    publish_call = worker.publisher.publish.await_args
+    assert publish_call.kwargs["exchange_name"] == "rejected_data"
+    assert publish_call.kwargs["routing_key"] == "itv_stations"
+    assert publish_call.kwargs["message"]["reason"] == "no_stations_extracted"
+    assert publish_call.kwargs["message"]["rejection_level"] == "message"
     assert worker.messages_processed == 1
     assert worker.messages_failed == 0
+    assert worker.messages_rejected == 1
+    assert worker.stations_rejected == 0
+
+
+@pytest.mark.asyncio
+async def test_process_message_publishes_station_level_rejections(
+    normalized_station_payload: dict[str, object],
+) -> None:
+    worker = NormalizerWorker()
+    station = _build_station(normalized_station_payload, station_id="GAL_LU-001", raw_id="LU-001")
+    transformer = Mock(transform=Mock(return_value=[station]))
+    transformer.rejected_items = [
+        {
+            "reason": "missing_raw_id",
+            "raw_fragment": {"nome": "Invalid station"},
+        }
+    ]
+    worker.factory = Mock(create=Mock(return_value=transformer))
+    worker.publisher = Mock(publish=AsyncMock())
+
+    await worker.process_message(
+        {
+            "message_id": "msg-2b",
+            "source": "galicia",
+            "payload": {"stations": [{"id": "LU-001"}]},
+            "format": "json",
+        }
+    )
+
+    assert worker.publisher.publish.await_count == 2
+    first_call = worker.publisher.publish.await_args_list[0]
+    second_call = worker.publisher.publish.await_args_list[1]
+
+    assert first_call.kwargs["exchange_name"] == "rejected_data"
+    assert first_call.kwargs["message"]["rejection_level"] == "station"
+    assert second_call.kwargs["exchange_name"] == "normalized_data"
+    assert second_call.kwargs["message"]["station_id"] == "GAL_LU-001"
+
+    assert worker.messages_processed == 1
+    assert worker.messages_failed == 0
+    assert worker.messages_rejected == 0
+    assert worker.stations_rejected == 1
+
+
+@pytest.mark.asyncio
+async def test_process_message_avoids_duplicate_message_rejection_when_station_rejected() -> None:
+    worker = NormalizerWorker()
+    transformer = Mock(transform=Mock(return_value=[]))
+    transformer.rejected_items = [
+        {
+            "reason": "missing_raw_id",
+            "raw_fragment": {"nome": "Invalid station"},
+        }
+    ]
+    worker.factory = Mock(create=Mock(return_value=transformer))
+    worker.publisher = Mock(publish=AsyncMock())
+
+    await worker.process_message(
+        {
+            "message_id": "msg-2c",
+            "source": "galicia",
+            "payload": {"stations": [{"nome": "Sin ID"}]},
+            "format": "json",
+        }
+    )
+
+    worker.publisher.publish.assert_awaited_once()
+    publish_call = worker.publisher.publish.await_args
+    assert publish_call.kwargs["exchange_name"] == "rejected_data"
+    assert publish_call.kwargs["message"]["rejection_level"] == "station"
+    assert publish_call.kwargs["message"]["reason"] == "missing_raw_id"
+
+    assert worker.messages_processed == 1
+    assert worker.messages_failed == 0
+    assert worker.messages_rejected == 0
+    assert worker.stations_rejected == 1
 
 
 @pytest.mark.asyncio

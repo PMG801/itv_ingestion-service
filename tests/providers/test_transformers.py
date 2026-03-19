@@ -22,12 +22,12 @@ def catalunya_xml_payload(fixtures_dir: Path) -> str:
 
 
 @pytest.fixture
-def galicia_json_payload(fixtures_dir: Path) -> dict:
+def galicia_json_payload(fixtures_dir: Path) -> dict[str, object]:
     return json.loads((fixtures_dir / "galicia_sample.json").read_text(encoding="utf-8"))
 
 
 @pytest.fixture
-def valencia_json_payload(fixtures_dir: Path) -> dict:
+def valencia_json_payload(fixtures_dir: Path) -> dict[str, object]:
     return json.loads((fixtures_dir / "valencia_sample.json").read_text(encoding="utf-8"))
 
 
@@ -63,7 +63,7 @@ def test_catalunya_transformer_maps_xml_aliases_to_normalized_schema(
 
 
 def test_galicia_transformer_maps_json_aliases_to_normalized_schema(
-    galicia_json_payload: dict,
+    galicia_json_payload: dict[str, object],
 ) -> None:
     transformer = GaliciaTransformer()
 
@@ -87,7 +87,7 @@ def test_galicia_transformer_maps_json_aliases_to_normalized_schema(
 
 
 def test_valencia_transformer_maps_json_aliases_to_normalized_schema(
-    valencia_json_payload: dict,
+    valencia_json_payload: dict[str, object],
 ) -> None:
     transformer = ValenciaTransformer()
 
@@ -108,3 +108,53 @@ def test_valencia_transformer_maps_json_aliases_to_normalized_schema(
     assert station.longitude == pytest.approx(-0.3763)
     assert station.phone == "+34963456789"
     assert station.email == "contacto@itvvalencia.es"
+
+
+def test_valencia_transformer_tracks_rejected_items_without_id() -> None:
+    transformer = ValenciaTransformer()
+
+    stations = transformer.transform(
+        {
+            "estaciones": [
+                {
+                    "nombre": "Sin ID",
+                    "direccion": "Calle Falsa 123",
+                }
+            ]
+        }
+    )
+
+    assert stations == []
+    assert len(transformer.rejected_items) == 1
+    assert transformer.rejected_items[0]["reason"] == "missing_raw_id"
+
+
+def test_galicia_transformer_tracks_rejected_items_without_id() -> None:
+    transformer = GaliciaTransformer()
+
+    stations = transformer.transform(
+        {
+            "stations": [
+                {
+                    "nome": "Sin ID",
+                    "enderezo": "Rúa Falsa 123",
+                }
+            ]
+        }
+    )
+
+    assert stations == []
+    assert len(transformer.rejected_items) == 1
+    assert transformer.rejected_items[0]["reason"] == "missing_raw_id"
+
+
+def test_catalunya_transformer_tracks_rejected_items_without_id() -> None:
+    transformer = CatalunyaTransformer()
+
+    stations = transformer.transform(
+        "<stations><station><nom>Sense ID</nom></station></stations>"
+    )
+
+    assert stations == []
+    assert len(transformer.rejected_items) == 1
+    assert transformer.rejected_items[0]["reason"] == "missing_raw_id"

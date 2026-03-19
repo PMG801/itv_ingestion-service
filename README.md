@@ -123,6 +123,7 @@ PERSISTER_REPLICAS=2   # Número de workers persistidores
 ### RabbitMQ Exchanges y Queues
 - **raw_data:** Datos sin procesar
 - **normalized_data:** Datos normalizados
+- **rejected_data:** Registros filtrados en normalización (trazabilidad/reintentos futuros)
 - **dlx:** Dead Letter Exchange (mensajes fallidos)
 
 Ver configuración completa en `infra/rabbitmq/definitions.json`

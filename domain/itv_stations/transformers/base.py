@@ -35,6 +35,24 @@ class BaseTransformer(ABC):
             source_system: Source identifier (catalunya, valencia, galicia).
         """
         self.source_system = source_system.lower()
+        self.rejected_items: list[dict[str, object]] = []
+
+    def reset_rejections(self) -> None:
+        """Reset collected rejected items before each transform call."""
+        self.rejected_items = []
+
+    def record_rejection(
+        self,
+        reason: str,
+        raw_fragment: dict[str, object] | str | None,
+    ) -> None:
+        """Collect a rejected raw fragment with a machine-readable reason."""
+        self.rejected_items.append(
+            {
+                "reason": reason,
+                "raw_fragment": raw_fragment,
+            }
+        )
     
     @abstractmethod
     def transform(self, raw_payload: Any) -> list[NormalizedStation]:

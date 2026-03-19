@@ -162,6 +162,14 @@ class RabbitMQClient:
         self.exchanges["normalized_data"] = normalized_data_exchange
         logger.debug("Declared exchange: normalized_data (topic, durable)")
 
+        rejected_data_exchange = await channel.declare_exchange(
+            name="rejected_data",
+            type=ExchangeType.TOPIC,
+            durable=True,
+        )
+        self.exchanges["rejected_data"] = rejected_data_exchange
+        logger.debug("Declared exchange: rejected_data (topic, durable)")
+
         # Declare Dead Letter Queues (DLQ) - no DLX for DLQs themselves
         dlq_raw = await channel.declare_queue(
             name="dlq.raw_data.itv_stations",
@@ -177,6 +185,13 @@ class RabbitMQClient:
         self.queues["dlq.normalized_data.itv_stations"] = dlq_normalized
         logger.debug("Declared DLQ: dlq.normalized_data.itv_stations")
 
+        dlq_rejected = await channel.declare_queue(
+            name="dlq.rejected_data.itv_stations",
+            durable=True,
+        )
+        self.queues["dlq.rejected_data.itv_stations"] = dlq_rejected
+        logger.debug("Declared DLQ: dlq.rejected_data.itv_stations")
+
         # Bind DLQs to DLX
         await dlq_raw.bind(
             exchange=dlx_exchange,
@@ -185,6 +200,10 @@ class RabbitMQClient:
         await dlq_normalized.bind(
             exchange=dlx_exchange,
             routing_key="dlx.normalized_data.itv_stations",
+        )
+        await dlq_rejected.bind(
+            exchange=dlx_exchange,
+            routing_key="dlx.rejected_data.itv_stations",
         )
 
         # Declare main queues with DLX configuration
@@ -210,6 +229,17 @@ class RabbitMQClient:
         self.queues["normalized_data.itv_stations"] = normalized_queue
         logger.debug("Declared queue: normalized_data.itv_stations (durable, with DLX)")
 
+        rejected_queue = await channel.declare_queue(
+            name="rejected_data.itv_stations",
+            durable=True,
+            arguments={
+                "x-dead-letter-exchange": "dlx",
+                "x-dead-letter-routing-key": "dlx.rejected_data.itv_stations",
+            },
+        )
+        self.queues["rejected_data.itv_stations"] = rejected_queue
+        logger.debug("Declared queue: rejected_data.itv_stations (durable, with DLX)")
+
         # Bind queues to exchanges
         await raw_queue.bind(
             exchange=raw_data_exchange,
@@ -222,6 +252,12 @@ class RabbitMQClient:
             routing_key="itv_stations",
         )
         logger.debug("Bound normalized_data.itv_stations -> normalized_data exchange (routing_key: itv_stations)")
+
+        await rejected_queue.bind(
+            exchange=rejected_data_exchange,
+            routing_key="itv_stations",
+        )
+        logger.debug("Bound rejected_data.itv_stations -> rejected_data exchange (routing_key: itv_stations)")
 
         logger.info("RabbitMQ topology declared successfully")
 

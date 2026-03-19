@@ -56,6 +56,8 @@ class GaliciaTransformer(BaseTransformer):
         Raises:
             ValueError: If CSV is malformed or cannot be parsed.
         """
+        self.reset_rejections()
+
         # Handle pre-parsed list of dicts (for testing)
         if isinstance(raw_payload, list):
             return self._transform_list(raw_payload)
@@ -104,6 +106,10 @@ class GaliciaTransformer(BaseTransformer):
                 except Exception as e:
                     raw_id = row.get("id", "unknown")
                     logger.warning(f"Failed to transform Galicia station {raw_id}: {e}")
+                    self.record_rejection(
+                        reason="station_transform_exception",
+                        raw_fragment=dict(row),
+                    )
                     continue
             
             logger.info(f"Transformed {len(stations)} stations from Galicia")
@@ -128,6 +134,10 @@ class GaliciaTransformer(BaseTransformer):
         for station_dict in stations_list:
             if not isinstance(station_dict, dict):
                 logger.warning("Skipping Galicia station with invalid payload type")
+                self.record_rejection(
+                    reason="invalid_station_payload_type",
+                    raw_fragment={"value": str(station_dict)},
+                )
                 continue
             try:
                 station = self._transform_station(station_dict)
@@ -136,6 +146,10 @@ class GaliciaTransformer(BaseTransformer):
             except Exception as e:
                 raw_id = self._as_optional_str(station_dict.get("id")) or "unknown"
                 logger.warning(f"Failed to transform Galicia station {raw_id}: {e}")
+                self.record_rejection(
+                    reason="station_transform_exception",
+                    raw_fragment=dict(station_dict),
+                )
                 continue
         
         logger.info(f"Transformed {len(stations)} stations from Galicia")
@@ -158,6 +172,10 @@ class GaliciaTransformer(BaseTransformer):
         
         if not raw_id:
             logger.warning("Skipping Galicia station without ID")
+            self.record_rejection(
+                reason="missing_raw_id",
+                raw_fragment=dict(data),
+            )
             return None
         
         # Map Galician field names to normalized schema
@@ -181,4 +199,8 @@ class GaliciaTransformer(BaseTransformer):
             )
         except Exception as e:
             logger.error(f"Validation failed for Galicia station {raw_id}: {e}")
+            self.record_rejection(
+                reason="schema_validation_failed",
+                raw_fragment=dict(data),
+            )
             return None

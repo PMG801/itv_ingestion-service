@@ -12,12 +12,13 @@ applies the appropriate transformation strategy, and publishes normalized data.
 import asyncio
 import logging
 import sys
-from typing import Dict, Any
+from typing import Dict, Any, Literal, cast
 
 from core.config import settings
 from core.messaging import RabbitMQClient
 from core.messaging.consumer import RabbitMQConsumer
 from apps.normalizer.factory import TransformerFactory
+from apps.normalizer.schemas import RejectedStationMessage
 
 # Configure logging
 logging.basicConfig(
@@ -50,6 +51,8 @@ class NormalizerWorker:
         self.factory = TransformerFactory()
         self.messages_processed = 0
         self.messages_failed = 0
+        self.messages_rejected = 0
+        self.stations_rejected = 0
     
     async def start(self) -> None:
         """
@@ -128,6 +131,13 @@ class NormalizerWorker:
                 raise ValueError(
                     f"Invalid message structure: missing source or payload"
                 )
+            if source not in {"catalunya", "valencia", "galicia"}:
+                raise ValueError(f"Invalid source in message: {source}")
+            if data_format not in {"json", "xml", "csv"}:
+                raise ValueError(f"Invalid format in message: {data_format}")
+
+            source_lit = cast(Literal["catalunya", "valencia", "galicia"], source)
+            format_lit = cast(Literal["json", "xml", "csv"], data_format)
             
             # Get appropriate transformer for this source
             transformer = self.factory.create(source)
@@ -138,11 +148,43 @@ class NormalizerWorker:
             
             # Transform raw data to normalized format
             normalized_stations = transformer.transform(payload)
+
+            # Publish station-level rejected fragments captured by transformer
+            raw_transformer_rejections: object = getattr(transformer, "rejected_items", [])
+            transformer_rejections: list[dict[str, object]] = []
+            if isinstance(raw_transformer_rejections, list):
+                for item in cast(list[object], raw_transformer_rejections):
+                    if isinstance(item, dict):
+                        transformer_rejections.append(cast(dict[str, object], item))
+            for rejected in transformer_rejections:
+                reason = str(rejected.get("reason", "station_filtered"))
+                raw_fragment: object | None = rejected.get("raw_fragment")
+                if not isinstance(raw_fragment, (dict, str)):
+                    raw_fragment = str(raw_fragment)
+                await self._publish_rejected(
+                    message_id=message_id,
+                    source=source_lit,
+                    data_format=format_lit,
+                    reason=reason,
+                    rejection_level="station",
+                    raw_payload=raw_fragment,
+                )
+            self.stations_rejected += len(transformer_rejections)
             
             if not normalized_stations:
                 logger.warning(
                     f"⚠️  No stations extracted from message {message_id}"
                 )
+                if not transformer_rejections:
+                    await self._publish_rejected(
+                        message_id=message_id,
+                        source=source_lit,
+                        data_format=format_lit,
+                        reason="no_stations_extracted",
+                        rejection_level="message",
+                        raw_payload=payload,
+                    )
+                    self.messages_rejected += 1
                 self.messages_processed += 1
                 return
             
@@ -178,7 +220,9 @@ class NormalizerWorker:
             if self.messages_processed % 10 == 0:
                 logger.info(
                     f"📊 Progress: {self.messages_processed} processed, "
-                    f"{self.messages_failed} failed"
+                    f"{self.messages_failed} failed, "
+                    f"{self.messages_rejected} messages rejected, "
+                    f"{self.stations_rejected} stations rejected"
                 )
             
         except ValueError as e:
@@ -209,6 +253,8 @@ class NormalizerWorker:
         logger.info(f"Final statistics:")
         logger.info(f"  - Messages processed: {self.messages_processed}")
         logger.info(f"  - Messages failed: {self.messages_failed}")
+        logger.info(f"  - Messages rejected: {self.messages_rejected}")
+        logger.info(f"  - Stations rejected: {self.stations_rejected}")
         logger.info("=" * 60)
         
         try:
@@ -217,6 +263,36 @@ class NormalizerWorker:
             logger.info("✅ Shutdown complete")
         except Exception as e:
             logger.error(f"Error during shutdown: {e}", exc_info=True)
+
+    async def _publish_rejected(
+        self,
+        message_id: str,
+        source: Literal["catalunya", "valencia", "galicia"],
+        data_format: Literal["json", "xml", "csv"],
+        reason: str,
+        rejection_level: Literal["message", "station"],
+        raw_payload: dict[str, Any] | str,
+    ) -> None:
+        """Publish filtered records for traceability and future retries."""
+        try:
+            rejected = RejectedStationMessage(
+                message_id=message_id,
+                source=source,
+                format=data_format,
+                reason=reason,
+                rejection_level=rejection_level,
+                raw_payload=raw_payload,
+            )
+            await self.publisher.publish(
+                message=rejected.model_dump(mode="json"),
+                exchange_name="rejected_data",
+                routing_key="itv_stations",
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to publish rejected payload for message {message_id}: {e}",
+                exc_info=True,
+            )
 
 
 async def main():

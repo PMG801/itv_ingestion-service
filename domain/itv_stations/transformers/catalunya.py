@@ -56,6 +56,8 @@ class CatalunyaTransformer(BaseTransformer):
         Raises:
             ValueError: If XML is malformed or cannot be parsed.
         """
+        self.reset_rejections()
+
         # Handle dict payload (for testing or pre-parsed data)
         if isinstance(raw_payload, dict):
             return self._transform_dict(raw_payload)
@@ -88,6 +90,10 @@ class CatalunyaTransformer(BaseTransformer):
                 logger.warning(
                     f"Failed to transform Catalunya station {raw_id}: {e}"
                 )
+                self.record_rejection(
+                    reason="station_transform_exception",
+                    raw_fragment=ET.tostring(station_elem, encoding="unicode"),
+                )
                 continue
         
         logger.info(f"Transformed {len(stations)} stations from Catalunya")
@@ -107,6 +113,10 @@ class CatalunyaTransformer(BaseTransformer):
         
         if not raw_id:
             logger.warning("Skipping station without ID")
+            self.record_rejection(
+                reason="missing_raw_id",
+                raw_fragment=ET.tostring(elem, encoding="unicode"),
+            )
             return None
         
         # Extract and normalize data
@@ -128,6 +138,10 @@ class CatalunyaTransformer(BaseTransformer):
             )
         except Exception as e:
             logger.error(f"Validation failed for station {raw_id}: {e}")
+            self.record_rejection(
+                reason="schema_validation_failed",
+                raw_fragment=ET.tostring(elem, encoding="unicode"),
+            )
             return None
     
     def _transform_dict(self, payload: Mapping[str, object]) -> list[NormalizedStation]:
@@ -174,6 +188,10 @@ class CatalunyaTransformer(BaseTransformer):
         for station_dict in stations_list:
             if not isinstance(station_dict, dict):
                 logger.warning("Skipping Catalunya station with invalid payload type")
+                self.record_rejection(
+                    reason="invalid_station_payload_type",
+                    raw_fragment={"value": str(station_dict)},
+                )
                 continue
             try:
                 station = self._transform_dict_station(station_dict)
@@ -182,6 +200,10 @@ class CatalunyaTransformer(BaseTransformer):
             except Exception as e:
                 raw_id = self._as_optional_str(station_dict.get("id")) or "unknown"
                 logger.warning(f"Failed to transform station {raw_id}: {e}")
+                self.record_rejection(
+                    reason="station_transform_exception",
+                    raw_fragment=dict(station_dict),
+                )
                 continue
         
         return stations
@@ -200,6 +222,10 @@ class CatalunyaTransformer(BaseTransformer):
         
         if not raw_id:
             logger.warning("Skipping station without ID")
+            self.record_rejection(
+                reason="missing_raw_id",
+                raw_fragment=dict(data),
+            )
             return None
         
         # Map Catalan field names to normalized schema
@@ -220,4 +246,8 @@ class CatalunyaTransformer(BaseTransformer):
             )
         except Exception as e:
             logger.error(f"Validation failed for station {raw_id}: {e}")
+            self.record_rejection(
+                reason="schema_validation_failed",
+                raw_fragment=dict(data),
+            )
             return None

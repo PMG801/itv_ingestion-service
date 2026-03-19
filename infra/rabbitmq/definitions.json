@@ -34,6 +34,15 @@
       "arguments": {}
     },
     {
+      "name": "rejected_data",
+      "vhost": "itv_data",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
       "name": "dlx",
       "vhost": "itv_data",
       "type": "topic",
@@ -65,6 +74,16 @@
       }
     },
     {
+      "name": "rejected_data.itv_stations",
+      "vhost": "itv_data",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "dlx",
+        "x-dead-letter-routing-key": "dlx.rejected_data.itv_stations"
+      }
+    },
+    {
       "name": "dlq.raw_data.itv_stations",
       "vhost": "itv_data",
       "durable": true,
@@ -73,6 +92,13 @@
     },
     {
       "name": "dlq.normalized_data.itv_stations",
+      "vhost": "itv_data",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "dlq.rejected_data.itv_stations",
       "vhost": "itv_data",
       "durable": true,
       "auto_delete": false,
@@ -97,6 +123,14 @@
       "arguments": {}
     },
     {
+      "source": "rejected_data",
+      "vhost": "itv_data",
+      "destination": "rejected_data.itv_stations",
+      "destination_type": "queue",
+      "routing_key": "itv_stations",
+      "arguments": {}
+    },
+    {
       "source": "dlx",
       "vhost": "itv_data",
       "destination": "dlq.raw_data.itv_stations",
@@ -110,6 +144,14 @@
       "destination": "dlq.normalized_data.itv_stations",
       "destination_type": "queue",
       "routing_key": "dlx.normalized_data.itv_stations",
+      "arguments": {}
+    },
+    {
+      "source": "dlx",
+      "vhost": "itv_data",
+      "destination": "dlq.rejected_data.itv_stations",
+      "destination_type": "queue",
+      "routing_key": "dlx.rejected_data.itv_stations",
       "arguments": {}
     }
   ]

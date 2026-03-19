@@ -58,6 +58,8 @@ class ValenciaTransformer(BaseTransformer):
         Raises:
             ValueError: If payload structure is invalid.
         """
+        self.reset_rejections()
+
         # Handle dict with "estaciones" key
         if isinstance(raw_payload, dict):
             payload_dict = cast(dict[str, object], raw_payload)
@@ -95,6 +97,10 @@ class ValenciaTransformer(BaseTransformer):
         for station_data in stations_list:
             if not isinstance(station_data, dict):
                 logger.warning("Skipping Valencia station with invalid payload type")
+                self.record_rejection(
+                    reason="invalid_station_payload_type",
+                    raw_fragment={"value": str(station_data)},
+                )
                 continue
             try:
                 station = self._transform_station(station_data)
@@ -103,6 +109,10 @@ class ValenciaTransformer(BaseTransformer):
             except Exception as e:
                 raw_id = self._as_optional_str(station_data.get("codigo")) or "unknown"
                 logger.warning(f"Failed to transform Valencia station {raw_id}: {e}")
+                self.record_rejection(
+                    reason="station_transform_exception",
+                    raw_fragment=dict(station_data),
+                )
                 continue
         
         logger.info(f"Transformed {len(stations)} stations from Valencia")
@@ -125,6 +135,10 @@ class ValenciaTransformer(BaseTransformer):
         
         if not raw_id:
             logger.warning("Skipping Valencia station without ID")
+            self.record_rejection(
+                reason="missing_raw_id",
+                raw_fragment=dict(data),
+            )
             return None
         
         # Map Valencia field names to normalized schema
@@ -147,4 +161,8 @@ class ValenciaTransformer(BaseTransformer):
             )
         except Exception as e:
             logger.error(f"Validation failed for Valencia station {raw_id}: {e}")
+            self.record_rejection(
+                reason="schema_validation_failed",
+                raw_fragment=dict(data),
+            )
             return None
