@@ -54,6 +54,10 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
+# Alias de compatibilidad para código que usa el nombre antiguo
+get_async_session = get_db
+
+
 # Función para cerrar el engine al finalizar la aplicación
 async def dispose_engine():
     await async_engine.dispose()

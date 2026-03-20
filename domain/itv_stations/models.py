@@ -6,7 +6,7 @@ Todos los modelos heredan de Base (DeclarativeBase) y residen en el schema 'itv'
 """
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Any
 
 from sqlalchemy import (
     String,
@@ -167,10 +167,10 @@ class EstacionITV(Base):
 class IngestionLog(Base):
     """
     Modelo ORM para log de auditoría del pipeline de ingesta.
-    
+
     Registra cada mensaje procesado por el sistema con su estado final,
     permitiendo debugging y trazabilidad de errores.
-    
+
     Attributes:
         id: Clave primaria autoincremental
         message_id: ID único del mensaje RabbitMQ
@@ -179,8 +179,9 @@ class IngestionLog(Base):
         status: Estado final del procesamiento
         error_message: Mensaje de error si falló
         processed_at: Timestamp del procesamiento (UTC)
+        metadata: Datos adicionales JSONB (timing, inyección, rechazos)
     """
-    
+
     __tablename__ = "ingestion_log"
     __table_args__ = (
         # NOTA: Los índices se crean en la migración de Alembic (001_initial.py)
@@ -192,10 +193,10 @@ class IngestionLog(Base):
         # Schema PostgreSQL
         {"schema": "itv"},
     )
-    
+
     # Primary Key
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    
+
     # Identificación del mensaje
     message_id: Mapped[str] = mapped_column(
         String(255),
@@ -203,7 +204,7 @@ class IngestionLog(Base):
         nullable=False,
         comment="ID único del mensaje RabbitMQ"
     )
-    
+
     # Clasificación
     domain: Mapped[str] = mapped_column(
         String(100),
@@ -215,21 +216,21 @@ class IngestionLog(Base):
         nullable=False,
         comment="Sistema fuente de los datos"
     )
-    
+
     # Estado del procesamiento
     status: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
         comment="Estado: success, failed, processing"
     )
-    
+
     # Detalles de error (si aplica)
     error_message: Mapped[Optional[str]] = mapped_column(
         Text,
         nullable=True,
         comment="Mensaje de error detallado"
     )
-    
+
     # Timestamp
     processed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -237,7 +238,66 @@ class IngestionLog(Base):
         default=lambda: datetime.now(timezone.utc),
         comment="Fecha y hora de procesamiento"
     )
-    
+
+    # Metadata adicional (timing, inyección, rechazos)
+    # Nota: 'metadata' es nombre reservado por SQLAlchemy en Declarative API.
+    metadata_json: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        "metadata",
+        JSONB,
+        nullable=True,
+        default={},
+        comment="Metadatos de timing, inyección y trazabilidad"
+    )
+
+    def add_timing(self, step: str, timestamp: Optional[datetime] = None) -> None:
+        """
+        Agrega un timestamp a la metadata para una etapa específica.
+
+        Ejemplo: add_timing("gateway_ingested", datetime.now(timezone.utc))
+
+        Args:
+            step: Nombre de la etapa (gateway_ingested, normalizer_started, etc.)
+            timestamp: Timestamp a guardar (default: ahora UTC)
+        """
+        if self.metadata_json is None:
+            self.metadata_json = {}
+        if "timing" not in self.metadata_json:
+            self.metadata_json["timing"] = {}
+
+        ts = timestamp or datetime.now(timezone.utc)
+        self.metadata_json["timing"][f"{step}_at"] = ts.isoformat()
+
+    def set_injection_type(self, injection_type: str, metadata_info: Optional[dict] = None) -> None:
+        """
+        Establece el tipo de inyección (api, file, synthetic) y metadatos asociados.
+
+        Args:
+            injection_type: 'api', 'file', o 'synthetic'
+            metadata_info: Datos adicionales (nombre de archivo, etc.)
+        """
+        if self.metadata_json is None:
+            self.metadata_json = {}
+        self.metadata_json["injection_type"] = injection_type
+        if metadata_info:
+            self.metadata_json["injection_info"] = metadata_info
+
+    def set_rejection_summary(self, total: int, rejected: int, reasons: dict[str, int]) -> None:
+        """
+        Registra un resumen de rechazos.
+
+        Args:
+            total: Total de estaciones procesadas
+            rejected: Total de estaciones rechazadas
+            reasons: Dict {reason: count} de motivos de rechazo
+        """
+        if self.metadata_json is None:
+            self.metadata_json = {}
+        self.metadata_json["rejection_summary"] = {
+            "total_stations": total,
+            "rejected_count": rejected,
+            "rejection_reasons": reasons
+        }
+
     def __repr__(self) -> str:
         return (
             f"<IngestionLog(id={self.id}, "

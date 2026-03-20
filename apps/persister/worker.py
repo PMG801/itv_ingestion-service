@@ -7,10 +7,12 @@ Este worker es el último paso del pipeline:
 2. Convierte NormalizedStation (Pydantic) a EstacionITV (ORM)
 3. Realiza UPSERT en PostgreSQL (ON CONFLICT UPDATE)
 4. Registra en ingestion_log el resultado del procesamiento
+   - Incluye timing information para benchmarking
 """
 import asyncio
 import json
 import logging
+from datetime import datetime, timezone
 
 from aio_pika import connect_robust
 from aio_pika.abc import AbstractChannel, AbstractIncomingMessage, AbstractRobustConnection
@@ -64,12 +66,18 @@ class PersisterWorker:
     async def process_message(self, message: AbstractIncomingMessage) -> None:
         """
         Procesa un mensaje de la cola: deserializa, mapea y persiste.
-        
+
+        Captura tiempos para cada etapa del pipeline y los almacena en
+        ingestion_log.metadata para benchmarking.
+
         Args:
             message: Mensaje RabbitMQ con datos normalizados
         """
         message_id = message.message_id or "unknown"
-        
+
+        # TIMING: Capturar cuando inicia el persister
+        persister_started_at = datetime.now(timezone.utc)
+
         async with message.process(ignore_processed=True):
             try:
                 # ================================================================
@@ -79,17 +87,20 @@ class PersisterWorker:
                 data = json.loads(body)
                 if not isinstance(data, dict):
                     raise ValueError("Normalized message payload must be a JSON object")
-                
+
                 logger.debug(f"Procesando mensaje {message_id}: {data.get('station_id')}")
-                
+
+                # Extraer timing context del Normalizer (si existe)
+                timing_context = data.pop("_timing_context", {})
+
                 # Validar con Pydantic
                 normalized_station = NormalizedStation(**data)
-                
+
                 # ================================================================
                 # 2. Convertir a ORM usando mapper
                 # ================================================================
                 estacion_orm = normalized_station_to_orm(normalized_station)
-                
+
                 # ================================================================
                 # 3. UPSERT en PostgreSQL
                 # ================================================================
@@ -111,7 +122,7 @@ class PersisterWorker:
                             fecha_creacion=estacion_orm.fecha_creacion,
                             fecha_actualizacion=estacion_orm.fecha_actualizacion,
                         )
-                        
+
                         # ON CONFLICT: actualizar todos los campos excepto PK y fecha_creacion
                         stmt = stmt.on_conflict_do_update(
                             constraint="uq_estaciones_fuente_id",
@@ -128,12 +139,15 @@ class PersisterWorker:
                                 # fecha_actualizacion se actualiza automáticamente por trigger
                             }
                         )
-                        
+
                         # Ejecutar UPSERT
                         await session.execute(stmt)
-                        
+
+                        # TIMING: Capturar cuando finaliza el persister
+                        persister_completed_at = datetime.now(timezone.utc)
+
                         # ========================================================
-                        # 4. Registrar en ingestion_log
+                        # 4. Registrar en ingestion_log con timing metadata
                         # ========================================================
                         log_entry = IngestionLog(
                             message_id=message_id,
@@ -142,22 +156,61 @@ class PersisterWorker:
                             status="success",
                             error_message=None,
                         )
+
+                        # Construir metadata con timing de TODAS las etapas
+                        metadata = {
+                            "timing": {
+                                # Tiempos del Normalizer (si disponibles)
+                                "gateway_ingested_at": timing_context.get("message_id"),  # Placeholder para gateway
+                                "normalizer_started_at": timing_context.get("normalizer_started_at"),
+                                "normalizer_completed_at": timing_context.get("normalizer_completed_at"),
+                                # Tiempos del Persister
+                                "persister_started_at": persister_started_at.isoformat(),
+                                "persister_completed_at": persister_completed_at.isoformat(),
+                            }
+                        }
+
+                        # Calcular duraciones
+                        try:
+                            normalizer_started_timestamp = datetime.fromisoformat(
+                                timing_context.get("normalizer_started_at", "").replace("Z", "+00:00")
+                            )
+                            normalizer_completed_timestamp = datetime.fromisoformat(
+                                timing_context.get("normalizer_completed_at", "").replace("Z", "+00:00")
+                            )
+                            normalizer_duration_ms = int(
+                                (normalizer_completed_timestamp - normalizer_started_timestamp).total_seconds() * 1000
+                            )
+                            metadata["timing"]["normalizer_duration_ms"] = normalizer_duration_ms
+                        except (ValueError, TypeError):
+                            pass  # Si falla el parsing, continuar sin esa métrica
+
+                        persister_duration_ms = int(
+                            (persister_completed_at - persister_started_at).total_seconds() * 1000
+                        )
+                        metadata["timing"]["persister_duration_ms"] = persister_duration_ms
+
+                        log_entry.metadata_json = metadata
                         session.add(log_entry)
-                        
+
                         await session.commit()
-                        
+
                         logger.info(
                             f"✓ Estación persistida: {estacion_orm.nombre} "
-                            f"({estacion_orm.fuente_origen}/{estacion_orm.id_en_fuente})"
+                            f"({estacion_orm.fuente_origen}/{estacion_orm.id_en_fuente}) "
+                            f"[persister: {persister_duration_ms}ms]"
                         )
-                        
+
                         # ACK del mensaje (procesamiento exitoso)
                         await message.ack()
-                    
+
                     except SQLAlchemyError as db_error:
                         await session.rollback()
                         logger.error(f"Error de BD al persistir mensaje {message_id}: {db_error}")
-                        
+
+                        # TIMING: Capturar tiempo de fallo
+                        persister_completed_at = datetime.now(timezone.utc)
+
                         # Registrar el fallo en ingestion_log
                         try:
                             log_entry = IngestionLog(
@@ -167,18 +220,33 @@ class PersisterWorker:
                                 status="failed",
                                 error_message=str(db_error)[:500],  # Truncar si es muy largo
                             )
+
+                            # Agregate timing metadata al error también
+                            metadata = {
+                                "timing": {
+                                    "normalizer_started_at": timing_context.get("normalizer_started_at"),
+                                    "normalizer_completed_at": timing_context.get("normalizer_completed_at"),
+                                    "persister_started_at": persister_started_at.isoformat(),
+                                    "persister_completed_at": persister_completed_at.isoformat(),
+                                    "persister_duration_ms": int(
+                                        (persister_completed_at - persister_started_at).total_seconds() * 1000
+                                    ),
+                                },
+                                "error_in_step": "persistence"
+                            }
+                            log_entry.metadata_json = metadata
                             session.add(log_entry)
                             await session.commit()
                         except Exception as log_error:
                             logger.error(f"No se pudo registrar error en ingestion_log: {log_error}")
-                        
+
                         # NACK para reintentar (irá a DLQ si supera max_retries)
                         await message.nack(requeue=False)
-            
+
             except json.JSONDecodeError as e:
                 logger.error(f"JSON inválido en mensaje {message_id}: {e}")
                 await message.nack(requeue=False)  # No reintentar JSON malformado
-            
+
             except Exception as e:
                 logger.exception(f"Error inesperado procesando mensaje {message_id}: {e}")
                 await message.nack(requeue=False)

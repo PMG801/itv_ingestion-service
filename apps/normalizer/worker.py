@@ -13,6 +13,7 @@ import asyncio
 import logging
 import sys
 from typing import Dict, Any, Literal, cast
+from datetime import datetime, timezone
 
 from core.config import settings
 from core.messaging import RabbitMQClient
@@ -100,10 +101,10 @@ class NormalizerWorker:
     async def process_message(self, message: Dict[str, Any]) -> None:
         """
         Process a single raw message.
-        
+
         Extracts the source system, selects the appropriate transformer,
         transforms the raw data, and publishes normalized stations.
-        
+
         Args:
             message: RawIngestionMessage from gateway containing:
                 - message_id: Unique identifier for tracing
@@ -111,7 +112,7 @@ class NormalizerWorker:
                 - payload: Raw data in source-specific format
                 - format: Data format (json, xml, csv)
                 - ingested_at: Ingestion timestamp
-                
+
         Raises:
             Exception: If transformation fails critically (will send to DLQ).
         """
@@ -119,12 +120,15 @@ class NormalizerWorker:
         source = message.get("source", "unknown")
         payload = message.get("payload")
         data_format = message.get("format", "unknown")
-        
+
+        # TIMING: Capturar cuando inicia el normalizer
+        normalizer_started_at = datetime.now(timezone.utc)
+
         logger.info(
             f"📥 Processing message {message_id} | "
             f"source={source} | format={data_format}"
         )
-        
+
         try:
             # Validate message structure
             if not source or not payload:
@@ -138,14 +142,14 @@ class NormalizerWorker:
 
             source_lit = cast(Literal["catalunya", "valencia", "galicia"], source)
             format_lit = cast(Literal["json", "xml", "csv"], data_format)
-            
+
             # Get appropriate transformer for this source
             transformer = self.factory.create(source)
-            
+
             logger.debug(
                 f"Using {transformer.__class__.__name__} for source={source}"
             )
-            
+
             # Transform raw data to normalized format
             normalized_stations = transformer.transform(payload)
 
@@ -170,7 +174,7 @@ class NormalizerWorker:
                     raw_payload=raw_fragment,
                 )
             self.stations_rejected += len(transformer_rejections)
-            
+
             if not normalized_stations:
                 logger.warning(
                     f"⚠️  No stations extracted from message {message_id}"
@@ -187,17 +191,28 @@ class NormalizerWorker:
                     self.messages_rejected += 1
                 self.messages_processed += 1
                 return
-            
+
             logger.info(
                 f"✅ Transformed {len(normalized_stations)} stations from {source}"
             )
-            
+
+            # TIMING: Capturar cuando finaliza la transformación
+            normalizer_completed_at = datetime.now(timezone.utc)
+
             # Publish each normalized station to the next queue
             published_count = 0
             for station in normalized_stations:
                 try:
+                    # Enriquecer el mensaje con timing information
+                    station_dict = station.model_dump(mode="json")
+                    station_dict["_timing_context"] = {
+                        "message_id": message_id,
+                        "normalizer_started_at": normalizer_started_at.isoformat(),
+                        "normalizer_completed_at": normalizer_completed_at.isoformat(),
+                    }
+
                     await self.publisher.publish(
-                        message=station.model_dump(mode="json"),
+                        message=station_dict,
                         exchange_name="normalized_data",
                         routing_key="itv_stations",
                     )
@@ -208,14 +223,14 @@ class NormalizerWorker:
                     )
                     # Continue with other stations
                     continue
-            
+
             logger.info(
                 f"📤 Published {published_count}/{len(normalized_stations)} "
                 f"stations to normalized_data exchange"
             )
-            
+
             self.messages_processed += 1
-            
+
             # Log progress every 10 messages
             if self.messages_processed % 10 == 0:
                 logger.info(
@@ -224,7 +239,7 @@ class NormalizerWorker:
                     f"{self.messages_rejected} messages rejected, "
                     f"{self.stations_rejected} stations rejected"
                 )
-            
+
         except ValueError as e:
             # Validation or transformation error - log and fail
             logger.error(
@@ -232,7 +247,7 @@ class NormalizerWorker:
             )
             self.messages_failed += 1
             raise  # Re-raise to send to DLQ
-            
+
         except Exception as e:
             # Unexpected error - log and fail
             logger.error(

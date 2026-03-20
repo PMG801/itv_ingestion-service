@@ -134,6 +134,19 @@ async def root():
 
 
 # Import and include routers
-from apps.gateway.routers import ingest
+from apps.gateway.routers import ingest, compatibility, monitoring, upload, stations
 
+# New ingest API (v1)
 app.include_router(ingest.router, prefix="/api/v1", tags=["ingestion"])
+
+# Monitoring API for dashboards
+app.include_router(monitoring.router, tags=["monitoring"])
+
+# Upload & injection API
+app.include_router(upload.router, tags=["injection"])
+
+# Compatibility router for old Frontend API
+app.include_router(compatibility.router, tags=["compatibility"])
+
+# Stations read API for frontend search/map
+app.include_router(stations.router, tags=["stations"])
