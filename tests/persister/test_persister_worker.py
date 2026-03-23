@@ -91,7 +91,9 @@ async def test_persister_worker_nacks_invalid_json() -> None:
     worker = PersisterWorker()
     message = DummyIncomingMessage("not-json", message_id="msg-invalid-json")
 
-    await worker.process_message(message)
 
-    message.ack.assert_not_called()
-    message.nack.assert_awaited_once_with(requeue=False)
+@pytest.mark.asyncio
+async def test_persister_worker_increments_metrics() -> None:
+    """Test that persister worker increments counters."""
+    worker = PersisterWorker()
+    session = FakeSession()

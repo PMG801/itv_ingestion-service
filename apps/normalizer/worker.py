@@ -12,7 +12,7 @@ applies the appropriate transformation strategy, and publishes normalized data.
 import asyncio
 import logging
 import sys
-from typing import Dict, Any, Literal, cast
+from typing import Any, Literal, cast
 from datetime import datetime, timezone
 
 from core.config import settings
@@ -45,7 +45,7 @@ class NormalizerWorker:
         factory: Transformer factory for creating source-specific transformers.
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the normalizer worker."""
         self.consumer = RabbitMQConsumer()
         self.publisher = RabbitMQClient()
@@ -98,7 +98,7 @@ class NormalizerWorker:
             logger.error(f"Fatal error in normalizer worker: {e}", exc_info=True)
             raise
     
-    async def process_message(self, message: Dict[str, Any]) -> None:
+    async def process_message(self, message: dict[str, Any]) -> None:
         """
         Process a single raw message.
 

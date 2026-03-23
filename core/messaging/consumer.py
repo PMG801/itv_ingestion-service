@@ -29,7 +29,7 @@ class RabbitMQConsumer:
         channel: Channel for consuming messages.
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize RabbitMQ consumer."""
         self.connection: AbstractRobustConnection | None = None
         self.channel: AbstractChannel | None = None

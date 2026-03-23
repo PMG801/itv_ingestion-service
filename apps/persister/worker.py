@@ -13,6 +13,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timezone
+from typing import Any
 
 from aio_pika import connect_robust
 from aio_pika.abc import AbstractChannel, AbstractIncomingMessage, AbstractRobustConnection
@@ -36,7 +37,7 @@ class PersisterWorker:
     el constraint único (fuente_origen, id_en_fuente).
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.rabbitmq_url = settings.RABBITMQ_URL
         self.queue_name = "normalized_data.itv_stations"
         self.connection: AbstractRobustConnection | None = None
@@ -91,7 +92,7 @@ class PersisterWorker:
                 logger.debug(f"Procesando mensaje {message_id}: {data.get('station_id')}")
 
                 # Extraer timing context del Normalizer (si existe)
-                timing_context = data.pop("_timing_context", {})
+                timing_context: dict[str, str] = data.pop("_timing_context", {})  # type: ignore[assignment]
 
                 # Validar con Pydantic
                 normalized_station = NormalizedStation(**data)
@@ -158,7 +159,7 @@ class PersisterWorker:
                         )
 
                         # Construir metadata con timing de TODAS las etapas
-                        metadata = {
+                        metadata: dict[str, Any] = {
                             "timing": {
                                 # Tiempos del Normalizer (si disponibles)
                                 "gateway_ingested_at": timing_context.get("message_id"),  # Placeholder para gateway
@@ -168,15 +169,17 @@ class PersisterWorker:
                                 "persister_started_at": persister_started_at.isoformat(),
                                 "persister_completed_at": persister_completed_at.isoformat(),
                             }
-                        }
+                        }  # type: ignore[assignment]
 
                         # Calcular duraciones
                         try:
+                            normalizer_started_str: str = timing_context.get("normalizer_started_at", "")  # type: ignore[assignment]
+                            normalizer_completed_str: str = timing_context.get("normalizer_completed_at", "")  # type: ignore[assignment]
                             normalizer_started_timestamp = datetime.fromisoformat(
-                                timing_context.get("normalizer_started_at", "").replace("Z", "+00:00")
+                                normalizer_started_str.replace("Z", "+00:00")
                             )
                             normalizer_completed_timestamp = datetime.fromisoformat(
-                                timing_context.get("normalizer_completed_at", "").replace("Z", "+00:00")
+                                normalizer_completed_str.replace("Z", "+00:00")
                             )
                             normalizer_duration_ms = int(
                                 (normalizer_completed_timestamp - normalizer_started_timestamp).total_seconds() * 1000

@@ -267,7 +267,7 @@ class IngestionLog(Base):
         ts = timestamp or datetime.now(timezone.utc)
         self.metadata_json["timing"][f"{step}_at"] = ts.isoformat()
 
-    def set_injection_type(self, injection_type: str, metadata_info: Optional[dict] = None) -> None:
+    def set_injection_type(self, injection_type: str, metadata_info: dict[str, Any] | None = None) -> None:
         """
         Establece el tipo de inyección (api, file, synthetic) y metadatos asociados.
 

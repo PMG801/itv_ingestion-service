@@ -27,7 +27,7 @@ class BaseTransformer(ABC):
         source_system: Identifier for the data source (catalunya, valencia, galicia).
     """
     
-    def __init__(self, source_system: str):
+    def __init__(self, source_system: str) -> None:
         """
         Initialize the transformer.
         

@@ -8,7 +8,7 @@ Proporciona endpoints para que el Frontend consulte:
 Estos endpoints permiten implementar un panel de benchmarking en tiempo real.
 """
 
-from typing import Optional
+from typing import Any
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api/v1/monitoring", tags=["monitoring"])
 async def get_ingest_status_endpoint(
     message_id: str,
     session: AsyncSession = Depends(get_async_session)
-):
+) -> dict[str, Any]:
     """
     Obtiene el estado completo de una ingesta específica.
 
@@ -78,7 +78,7 @@ async def get_ingest_status_endpoint(
 async def get_metrics_endpoint(
     period_hours: int = Query(24, ge=1, le=8760),
     session: AsyncSession = Depends(get_async_session)
-):
+) -> dict[str, Any]:
     """
     Obtiene métricas agregadas del sistema en un período.
 

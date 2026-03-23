@@ -1,7 +1,13 @@
 # Makefile para ITV Data Engine
 # Comandos útiles para desarrollo
 
-.PHONY: help setup up down logs clean test
+.PHONY: help setup up down logs clean test test-all test-core test-domain test-gateway test-normalizer test-persister test-providers test-cov ensure-test-deps
+
+# Variables para pytest
+TEST ?= tests
+PYTEST_ARGS ?=
+PDM_CMD := $(shell if [ -x venv/bin/pdm ]; then echo "PDM_IGNORE_ACTIVE_VENV=1 ./venv/bin/pdm"; elif command -v pdm >/dev/null 2>&1; then echo "PDM_IGNORE_ACTIVE_VENV=1 pdm"; fi)
+PYTEST_CMD := $(shell if [ -x venv/bin/python ]; then echo "./venv/bin/python -m pytest"; elif command -v python3 >/dev/null 2>&1; then echo "python3 -m pytest"; elif command -v pytest >/dev/null 2>&1; then echo "pytest"; fi)
 
 help: ## Mostrar ayuda
 	@echo "Comandos disponibles:"
@@ -48,25 +54,86 @@ clean-all: ## Limpiar TODO (incluye imágenes)
 restart: down up ## Reiniciar todos los servicios
 
 install: ## Instalar dependencias con PDM
-	pdm install
+	@if [ -z "$(PDM_CMD)" ]; then \
+		echo "❌ pdm no encontrado. Instálalo o usa ./venv/bin/pdm"; \
+		exit 1; \
+	fi
+	$(PDM_CMD) install
 
 install-dev: ## Instalar dependencias de desarrollo
-	pdm install -d
+	@if [ -z "$(PDM_CMD)" ]; then \
+		echo "❌ pdm no encontrado. Instálalo o usa ./venv/bin/pdm"; \
+		exit 1; \
+	fi
+	$(PDM_CMD) install -d
 
-test: ## Ejecutar tests
-	pdm run test
+ensure-test-deps: ## Verificar dependencias de test e instalar si faltan
+	@if [ -n "$(PDM_CMD)" ]; then \
+		./venv/bin/python -c "import faker, pytest" >/dev/null 2>&1 || $(PDM_CMD) install -d; \
+	fi
+
+test: ## Ejecutar pytest (uso: make test TEST=tests/gateway PYTEST_ARGS="-k ingest -x -vv")
+	@$(MAKE) ensure-test-deps
+	@if [ -n "$(PDM_CMD)" ]; then \
+		$(PDM_CMD) run pytest $(TEST) $(PYTEST_ARGS); \
+	elif [ -n "$(PYTEST_CMD)" ]; then \
+		$(PYTEST_CMD) $(TEST) $(PYTEST_ARGS); \
+	else \
+		echo "❌ No se encontró pytest ni pdm para ejecutar tests"; \
+		exit 1; \
+	fi
+
+test-all: ## Ejecutar todos los tests
+	$(MAKE) test TEST=tests
+
+test-core: ## Ejecutar tests de core
+	$(MAKE) test TEST=tests/core PYTEST_ARGS="$(PYTEST_ARGS)"
+
+test-domain: ## Ejecutar tests de domain
+	$(MAKE) test TEST=tests/domain PYTEST_ARGS="$(PYTEST_ARGS)"
+
+test-gateway: ## Ejecutar tests de gateway
+	$(MAKE) test TEST=tests/gateway PYTEST_ARGS="$(PYTEST_ARGS)"
+
+test-normalizer: ## Ejecutar tests de normalizer
+	$(MAKE) test TEST=tests/normalizer PYTEST_ARGS="$(PYTEST_ARGS)"
+
+test-persister: ## Ejecutar tests de persister
+	$(MAKE) test TEST=tests/persister PYTEST_ARGS="$(PYTEST_ARGS)"
+
+test-providers: ## Ejecutar tests de providers
+	$(MAKE) test TEST=tests/providers PYTEST_ARGS="$(PYTEST_ARGS)"
 
 test-cov: ## Ejecutar tests con cobertura
-	pdm run test-cov
+	@if [ -n "$(PDM_CMD)" ]; then \
+		$(PDM_CMD) run pytest $(TEST) --cov=apps --cov=core --cov=domain --cov-report=html --cov-report=term $(PYTEST_ARGS); \
+	elif [ -n "$(PYTEST_CMD)" ]; then \
+		$(PYTEST_CMD) $(TEST) --cov=apps --cov=core --cov=domain --cov-report=html --cov-report=term $(PYTEST_ARGS); \
+	else \
+		echo "❌ No se encontró pytest ni pdm para ejecutar cobertura"; \
+		exit 1; \
+	fi
 
 format: ## Formatear código con black
-	pdm run format
+	@if [ -z "$(PDM_CMD)" ]; then \
+		echo "❌ pdm no encontrado. Instálalo o usa ./venv/bin/pdm"; \
+		exit 1; \
+	fi
+	$(PDM_CMD) run format
 
 lint: ## Ejecutar linter (ruff)
-	pdm run lint
+	@if [ -z "$(PDM_CMD)" ]; then \
+		echo "❌ pdm no encontrado. Instálalo o usa ./venv/bin/pdm"; \
+		exit 1; \
+	fi
+	$(PDM_CMD) run lint
 
 type-check: ## Verificar tipos con mypy
-	pdm run type-check
+	@if [ -z "$(PDM_CMD)" ]; then \
+		echo "❌ pdm no encontrado. Instálalo o usa ./venv/bin/pdm"; \
+		exit 1; \
+	fi
+	$(PDM_CMD) run type-check
 
 quality: format lint type-check ## Ejecutar todas las verificaciones de calidad
 

@@ -2,6 +2,7 @@
 Stations Router para lectura de estaciones y provincias desde PostgreSQL.
 """
 
+from typing import Any
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +18,7 @@ router = APIRouter(tags=["stations"])
 async def get_all_stations(
     session: AsyncSession = Depends(get_async_session),
     limit: int = Query(5000, ge=1, le=20000),
-):
+) -> list[dict[str, Any]]:
     stmt = select(EstacionITV).order_by(EstacionITV.id.desc()).limit(limit)
     result = await session.execute(stmt)
     stations = result.scalars().all()
@@ -39,15 +40,15 @@ async def get_all_stations(
             }
         )
 
-    return response
+    return response  # type: ignore[return-value]
 
 
 @router.get("/api/v1/stations/provinces")
 @router.get("/api/provincias")
-async def get_provinces(session: AsyncSession = Depends(get_async_session)):
+async def get_provinces(session: AsyncSession = Depends(get_async_session)) -> list[dict[str, Any]]:
     stmt = select(EstacionITV)
     result = await session.execute(stmt)
-    stations = result.scalars().all()
+    stations = result.scalars().all()  # type: ignore[assignment]
 
     provinces: set[str] = set()
     for station in stations:

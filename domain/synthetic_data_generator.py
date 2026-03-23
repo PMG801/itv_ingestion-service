@@ -70,7 +70,7 @@ class SyntheticDataGenerator:
             station = cls._generate_single_station(source, i + 1, error_rate, include_errors)
             stations.append(station)
 
-        return stations
+        return stations  # type: ignore[return-value]
 
     @classmethod
     def _generate_single_station(

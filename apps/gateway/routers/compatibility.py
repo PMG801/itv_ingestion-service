@@ -7,7 +7,7 @@ Este router actúa como un adaptador entre la API esperada por el Frontend
 Mantiene un caché en memoria de source_code → message_id para el polling posterior.
 """
 
-from typing import Dict, Any
+from typing import Any
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -24,16 +24,16 @@ from sqlalchemy import select, func, text
 from sqlalchemy.dialects.postgresql import insert
 
 # Cache en memoria: {source_code: {message_id, stats, timestamp}}
-_message_id_cache: Dict[str, Dict[str, Any]] = {}
+_message_id_cache: dict[str, dict[str, Any]] = {}
 
 router = APIRouter(prefix="/api/carga", tags=["compatibility"])
 
 
 @router.post("/")
 async def load_data(
-    payload: dict,
+    payload: dict[str, Any],
     session: AsyncSession = Depends(get_async_session)
-):
+) -> dict[str, Any]:
     """
     Endpoint compatibilidad: inicia carga de datos desde una fuente.
 
@@ -64,10 +64,15 @@ async def load_data(
             detail="Campo 'fuente' requerido en el body"
         )
 
-    source_code = payload["fuente"]
+    source_code = payload.get("fuente", "")
+    if not isinstance(source_code, str):
+        raise HTTPException(
+            status_code=400,
+            detail="Campo 'fuente' debe ser string"
+        )
     source_name = source_mapping.get(source_code)
 
-    if not source_name:
+    if not source_name or source_name not in ["catalunya", "valencia", "galicia"]:
         raise HTTPException(
             status_code=400,
             detail=f"Fuente inválida: {source_code}. Usar CAT, VAL o GAL"
@@ -76,8 +81,10 @@ async def load_data(
     message_id = str(uuid4())
 
     try:
+        from typing import Literal, cast
+        source_literal = cast(Literal["catalunya", "valencia", "galicia"], source_name)
         generated = SyntheticDataGenerator.generate_stations(
-            source=source_name,
+            source=source_literal,
             count=25,
             error_rate=0.05,
             include_errors=["missing_field"]
@@ -88,19 +95,20 @@ async def load_data(
 
         for raw_station in generated:
             try:
+                raw_str: dict[str, str | float | None] = raw_station  # type: ignore[assignment]
                 normalized_station = NormalizedStation(
-                    station_id=str(raw_station["station_id"]),
-                    name=str(raw_station["name"]),
-                    source_system=source_name,
-                    address=raw_station.get("address"),
-                    city=raw_station.get("city"),
-                    province=raw_station.get("province"),
-                    postal_code=raw_station.get("postal_code"),
-                    latitude=raw_station.get("latitude"),
-                    longitude=raw_station.get("longitude"),
-                    phone=raw_station.get("phone"),
-                    email=raw_station.get("email"),
-                    raw_id=raw_station.get("raw_id"),
+                    station_id=str(raw_station["station_id"]),  # type: ignore[index]
+                    name=str(raw_station["name"]),  # type: ignore[index]
+                    source_system=source_literal,
+                    address=raw_str.get("address"),  # type: ignore[assignment]
+                    city=raw_str.get("city"),  # type: ignore[assignment]
+                    province=raw_str.get("province"),  # type: ignore[assignment]
+                    postal_code=raw_str.get("postal_code"),  # type: ignore[assignment]
+                    latitude=raw_str.get("latitude"),  # type: ignore[assignment]
+                    longitude=raw_str.get("longitude"),  # type: ignore[assignment]
+                    phone=raw_str.get("phone"),  # type: ignore[assignment]
+                    email=raw_str.get("email"),  # type: ignore[assignment]
+                    raw_id=raw_str.get("raw_id"),  # type: ignore[assignment]
                 )
 
                 estacion_orm = normalized_station_to_orm(normalized_station)
