@@ -96,6 +96,10 @@ class CatalunyaTransformer(BaseTransformer):
                 )
                 continue
         
+        # Apply deduplication checks
+        stations = self._check_duplicate_within_message(stations)
+        stations = self._check_duplicate_contact_fields(stations)
+        
         logger.info(f"Transformed {len(stations)} stations from Catalunya")
         return stations
     
@@ -122,7 +126,7 @@ class CatalunyaTransformer(BaseTransformer):
         # Extract and normalize data
         # Validate and create NormalizedStation
         try:
-            return NormalizedStation(
+            station = NormalizedStation(
                 station_id=self._generate_station_id(raw_id),
                 name=elem.findtext("nom", "").strip(),
                 address=self._as_optional_str(elem.findtext("adreca")),
@@ -136,6 +140,18 @@ class CatalunyaTransformer(BaseTransformer):
                 source_system="catalunya",
                 raw_id=raw_id,
             )
+
+            # Apply validation rules
+            is_valid, validation_reason = self._validate_station(station)
+            if not is_valid:
+                logger.warning(f"Station {raw_id} failed validation: {validation_reason}")
+                self.record_rejection(
+                    reason=validation_reason or "validation_failed",
+                    raw_fragment=ET.tostring(elem, encoding="unicode"),
+                )
+                return None
+
+            return station
         except Exception as e:
             logger.error(f"Validation failed for station {raw_id}: {e}")
             self.record_rejection(
@@ -206,6 +222,10 @@ class CatalunyaTransformer(BaseTransformer):
                 )
                 continue
         
+        # Apply deduplication checks
+        stations = self._check_duplicate_within_message(stations)
+        stations = self._check_duplicate_contact_fields(stations)
+        
         return stations
     
     def _transform_dict_station(self, data: Mapping[str, object]) -> NormalizedStation | None:
@@ -230,7 +250,7 @@ class CatalunyaTransformer(BaseTransformer):
         
         # Map Catalan field names to normalized schema
         try:
-            return NormalizedStation(
+            station = NormalizedStation(
                 station_id=self._generate_station_id(raw_id),
                 name=self._as_optional_str(data.get("nom")) or "",
                 address=self._as_optional_str(data.get("adreca")),
@@ -244,6 +264,18 @@ class CatalunyaTransformer(BaseTransformer):
                 source_system="catalunya",
                 raw_id=raw_id,
             )
+
+            # Apply validation rules
+            is_valid, validation_reason = self._validate_station(station)
+            if not is_valid:
+                logger.warning(f"Station {raw_id} failed validation: {validation_reason}")
+                self.record_rejection(
+                    reason=validation_reason or "validation_failed",
+                    raw_fragment=dict(data),
+                )
+                return None
+
+            return station
         except Exception as e:
             logger.error(f"Validation failed for station {raw_id}: {e}")
             self.record_rejection(

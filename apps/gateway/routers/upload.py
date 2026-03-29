@@ -89,15 +89,12 @@ async def inject_synthetic_data(
 
     try:
         # Generar datos sintéticos
-        stations = SyntheticDataGenerator.generate_stations(
+        payload_dict = SyntheticDataGenerator.generate_stations(
             source=source_literal,
             count=count,
             error_rate=error_rate,
             include_errors=include_errors or [],
         )
-
-        # Crear payload
-        payload = {"stations": stations}
 
         # Generar message_id único para este lote
         message_id = str(uuid4())
@@ -118,7 +115,7 @@ async def inject_synthetic_data(
         raw_message = RawIngestionMessage(
             message_id=message_id,
             source=source_literal,
-            payload=payload,  # type: ignore[arg-type]
+            payload=payload_dict,  # type: ignore[arg-type]
             format="json",
         )
 

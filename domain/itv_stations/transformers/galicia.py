@@ -112,6 +112,10 @@ class GaliciaTransformer(BaseTransformer):
                     )
                     continue
             
+            # Apply deduplication checks
+            stations = self._check_duplicate_within_message(stations)
+            stations = self._check_duplicate_contact_fields(stations)
+            
             logger.info(f"Transformed {len(stations)} stations from Galicia")
             return stations
             
@@ -152,6 +156,10 @@ class GaliciaTransformer(BaseTransformer):
                 )
                 continue
         
+        # Apply deduplication checks
+        stations = self._check_duplicate_within_message(stations)
+        stations = self._check_duplicate_contact_fields(stations)
+        
         logger.info(f"Transformed {len(stations)} stations from Galicia")
         return stations
     
@@ -181,7 +189,7 @@ class GaliciaTransformer(BaseTransformer):
         # Map Galician field names to normalized schema
         # Support both Galician and Spanish field names
         try:
-            return NormalizedStation(
+            station = NormalizedStation(
                 station_id=self._generate_station_id(raw_id),
                 name=self._as_optional_str(data.get("nome") or data.get("nombre") or data.get("name")) or "",
                 address=self._as_optional_str(data.get("enderezo") or data.get("direccion") or data.get("address")),
@@ -197,6 +205,18 @@ class GaliciaTransformer(BaseTransformer):
                 source_system="galicia",
                 raw_id=raw_id,
             )
+
+            # Apply validation rules
+            is_valid, validation_reason = self._validate_station(station)
+            if not is_valid:
+                logger.warning(f"Station {raw_id} failed validation: {validation_reason}")
+                self.record_rejection(
+                    reason=validation_reason or "validation_failed",
+                    raw_fragment=dict(data),
+                )
+                return None
+
+            return station
         except Exception as e:
             logger.error(f"Validation failed for Galicia station {raw_id}: {e}")
             self.record_rejection(

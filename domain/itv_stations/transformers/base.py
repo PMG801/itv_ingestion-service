@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from domain.itv_stations.schemas import NormalizedStation
+from domain.itv_stations.rules import ITVValidationRules
 
 
 class BaseTransformer(ABC):
@@ -53,6 +54,62 @@ class BaseTransformer(ABC):
                 "raw_fragment": raw_fragment,
             }
         )
+
+    def _validate_station(self, station: NormalizedStation) -> tuple[bool, str | None]:
+        """
+        Apply all validation rules to a station before accepting it.
+
+        Validates:
+        - Email format (simple regex)
+        - Province is valid Spanish province
+        - Coordinates are within province bounds
+        - Contact information minimum requirements
+        - Postal code matches province
+
+        Args:
+            station: NormalizedStation to validate
+
+        Returns:
+            Tuple of (is_valid: bool, reason: str | None)
+            If is_valid is False, reason contains the rejection reason
+        """
+        # Validate email if present
+        if station.email and not ITVValidationRules.validate_email_simple(station.email):
+            return False, "invalid_email_format"
+
+        # Validate province if present
+        if station.province and not ITVValidationRules.validate_province_spain(station.province):
+            return False, "invalid_province"
+
+        # Validate coordinates by province
+        if station.latitude and station.longitude and station.province:
+            if not ITVValidationRules.validate_coordinates_by_province(
+                station.latitude,
+                station.longitude,
+                station.province,
+            ):
+                return False, "coordinates_outside_province_bounds"
+
+        # Validate postal code matches province
+        if station.postal_code and station.province:
+            if not ITVValidationRules.validate_postal_code_by_province(
+                station.postal_code,
+                station.province,
+            ):
+                return False, "postal_code_mismatch_province"
+
+        # Validate minimum contact and location requirements
+        if not ITVValidationRules.validate_contact_minimum(
+            station.phone,
+            station.email,
+            station.address,
+            station.city,
+            station.province,
+            station.postal_code,
+        ):
+            return False, "insufficient_contact_or_location"
+
+        return True, None
     
     @abstractmethod
     def transform(self, raw_payload: Any) -> list[NormalizedStation]:
@@ -196,3 +253,115 @@ class BaseTransformer(ABC):
             return digits
         
         return None
+
+    def _check_duplicate_within_message(
+        self,
+        stations: list[NormalizedStation],
+    ) -> list[NormalizedStation]:
+        """
+        Filter out duplicate stations within the same message.
+
+        Tracks station IDs and name+city combinations.
+        If a duplicate is found, records rejection and removes it from list.
+
+        Args:
+            stations: List of NormalizedStation objects to check
+
+        Returns:
+            List of stations with duplicates removed
+        """
+        seen_ids: set[str] = set()
+        seen_name_city: set[tuple[str, str]] = set()
+        filtered_stations: list[NormalizedStation] = []
+
+        for station in stations:
+            station_id = station.station_id.upper()
+            name_city_key = (station.name.upper(), (station.city or "").upper())
+
+            # Check for duplicate ID
+            if station_id in seen_ids:
+                self.record_rejection(
+                    reason="duplicate_id_within_message",
+                    raw_fragment={
+                        "station_id": station.station_id,
+                        "name": station.name,
+                        "city": station.city,
+                    },
+                )
+                continue
+
+            # Check for duplicate name+city combination (functional duplicate)
+            if name_city_key in seen_name_city:
+                self.record_rejection(
+                    reason="duplicate_name_city_within_message",
+                    raw_fragment={
+                        "station_id": station.station_id,
+                        "name": station.name,
+                        "city": station.city,
+                    },
+                )
+                continue
+
+            seen_ids.add(station_id)
+            seen_name_city.add(name_city_key)
+            filtered_stations.append(station)
+
+        return filtered_stations
+
+    def _check_duplicate_contact_fields(
+        self,
+        stations: list[NormalizedStation],
+    ) -> list[NormalizedStation]:
+        """
+        Filter out duplicate contact information within the same message.
+
+        Detects stations with duplicate phone or email addresses.
+        If duplicates found, keep first, record rejection for others.
+
+        Args:
+            stations: List of NormalizedStation objects to check
+
+        Returns:
+            List of stations with duplicate contacts removed
+        """
+        seen_phones: set[str] = set()
+        seen_emails: set[str] = set()
+        filtered_stations: list[NormalizedStation] = []
+
+        for station in stations:
+            should_keep = True
+
+            # Check for duplicate phone
+            if station.phone:
+                phone_normalized = station.phone.upper()
+                if phone_normalized in seen_phones:
+                    self.record_rejection(
+                        reason="duplicate_phone_in_message",
+                        raw_fragment={
+                            "station_id": station.station_id,
+                            "phone": station.phone,
+                        },
+                    )
+                    should_keep = False
+                else:
+                    seen_phones.add(phone_normalized)
+
+            # Check for duplicate email
+            if station.email and should_keep:
+                email_normalized = station.email.lower()
+                if email_normalized in seen_emails:
+                    self.record_rejection(
+                        reason="duplicate_email_in_message",
+                        raw_fragment={
+                            "station_id": station.station_id,
+                            "email": station.email,
+                        },
+                    )
+                    should_keep = False
+                else:
+                    seen_emails.add(email_normalized)
+
+            if should_keep:
+                filtered_stations.append(station)
+
+        return filtered_stations

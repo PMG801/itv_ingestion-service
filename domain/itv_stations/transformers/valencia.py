@@ -115,6 +115,10 @@ class ValenciaTransformer(BaseTransformer):
                 )
                 continue
         
+        # Apply deduplication checks
+        stations = self._check_duplicate_within_message(stations)
+        stations = self._check_duplicate_contact_fields(stations)
+        
         logger.info(f"Transformed {len(stations)} stations from Valencia")
         return stations
     
@@ -143,7 +147,7 @@ class ValenciaTransformer(BaseTransformer):
         
         # Map Valencia field names to normalized schema
         try:
-            return NormalizedStation(
+            station = NormalizedStation(
                 station_id=self._generate_station_id(raw_id),
                 name=self._as_optional_str(data.get("nombre") or data.get("name")) or "",
                 address=self._as_optional_str(data.get("direccion") or data.get("address")),
@@ -159,6 +163,18 @@ class ValenciaTransformer(BaseTransformer):
                 source_system="valencia",
                 raw_id=raw_id,
             )
+
+            # Apply validation rules
+            is_valid, validation_reason = self._validate_station(station)
+            if not is_valid:
+                logger.warning(f"Station {raw_id} failed validation: {validation_reason}")
+                self.record_rejection(
+                    reason=validation_reason or "validation_failed",
+                    raw_fragment=dict(data),
+                )
+                return None
+
+            return station
         except Exception as e:
             logger.error(f"Validation failed for Valencia station {raw_id}: {e}")
             self.record_rejection(

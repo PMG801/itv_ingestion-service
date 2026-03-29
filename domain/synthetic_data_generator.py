@@ -21,20 +21,58 @@ fake = Faker("es_ES")  # Usar locale Español
 class SyntheticDataGenerator:
     """Generador de datos sintéticos para estaciones ITV."""
 
+    STATION_TYPES = (
+        "Fija",
+        "Móvil",
+        "Industrial",
+        "Turismos",
+        "Mixta",
+    )
+
     SOURCES = {
-        "catalunya": {"prefix": "CAT", "region": "Cataluña"},
+        "catalunya": {"prefix": "CAT", "region": "Catalonia"},
         "valencia": {"prefix": "VAL", "region": "Valencia"},
         "galicia": {"prefix": "GAL", "region": "Galicia"},
     }
 
+    # Provincias por región (nombres válidos según SPANISH_PROVINCES en rules.py)
+    REGION_PROVINCES = {
+        "catalunya": ["BARCELONA", "GIRONA", "LLEIDA", "TARRAGONA"],
+        "valencia": ["CASTELLÓN", "VALENCIA", "ALICANTE"],
+        "galicia": ["A CORUÑA", "LUGO", "OURENSE", "PONTEVEDRA"],
+    }
+
     # Coordenadas por región (aproximadas)
     REGION_COORDS = {
-        "catalana": {"lat_range": (41.0, 42.9), "lon_range": (0.1, 3.3)},
+        "catalunya": {"lat_range": (41.0, 42.9), "lon_range": (0.1, 3.3)},
         "valencia": {"lat_range": (38.6, 40.8), "lon_range": (-1.5, -0.1)},
         "galicia": {"lat_range": (42.1, 43.8), "lon_range": (-9.3, -7.0)},
     }
 
-    STATION_TYPES = ["Fija", "Móvil", "Portátil"]
+
+    @classmethod
+    def _get_postal_code_prefix(cls, province: str) -> str:
+        """
+        Obtiene el prefijo postal correcto (primeros 2 dígitos) para una provincia.
+        
+        Basado en PROVINCE_POSTAL_CODES de domain.itv_stations.rules.
+        """
+        prefix_map = {
+            "ÁLAVA": "01", "ALBACETE": "02", "ALICANTE": "03", "ALMERÍA": "04",
+            "ÁVILA": "05", "BADAJOZ": "06", "BARCELONA": "08", "BURGOS": "09",
+            "CÁCERES": "10", "CÁDIZ": "11", "CANTABRIA": "39", "CASTELLÓN": "12",
+            "CEUTA": "51", "CIUDAD REAL": "13", "CÓRDOBA": "14", "CUENCA": "16",
+            "GIRONA": "17", "GRANADA": "18", "GUADALAJARA": "19", "GUIPÚZCOA": "20",
+            "HUELVA": "21", "HUESCA": "22", "JAÉN": "23", "LA CORUÑA": "15",
+            "LA RIOJA": "26", "LAS PALMAS": "35", "LEÓN": "24", "LLEIDA": "25",
+            "LUGO": "27", "MADRID": "28", "MÁLAGA": "29", "MELILLA": "52",
+            "MURCIA": "30", "NAVARRA": "31", "OURENSE": "32", "PALENCIA": "34",
+            "PALMA": "07", "PONTEVEDRA": "36", "SALAMANCA": "37", "SEGOVIA": "40",
+            "SEVILLA": "41", "SORIA": "42", "TARRAGONA": "43", "TERUEL": "44",
+            "TOLEDO": "45", "VALENCIA": "46", "VALLADOLID": "47", "VIZCAYA": "48",
+            "ZAMORA": "49", "ZARAGOZA": "50", "A CORUÑA": "15",
+        }
+        return prefix_map.get(province.upper(), "28")  # Default Madrid
 
     @classmethod
     def generate_stations(
@@ -43,9 +81,9 @@ class SyntheticDataGenerator:
         count: int = 10,
         error_rate: float = 0.0,
         include_errors: Optional[list[str]] = None,
-    ) -> list[dict[str, Any]]:
+    ) -> dict[str, Any]:
         """
-        Genera un lote de estaciones ITV sintéticas.
+        Genera un lote de estaciones ITV sintéticas con formato específico por región.
 
         Args:
             source: Fuente ('catalunya', 'valencia', 'galicia')
@@ -58,7 +96,10 @@ class SyntheticDataGenerator:
                 - 'malformed_phone': teléfono inválido
 
         Returns:
-            Lista de dicts con datos de estaciones normalizadas
+            Payload con estaciones en el formato esperado por cada transformador:
+            - Catalunya: dict con clave "stations"
+            - Valencia: dict con clave "estaciones"
+            - Galicia: dict con clave "stations"
         """
         if source not in cls.SOURCES:
             raise ValueError(f"Fuente inválida: {source}. Usar: {list(cls.SOURCES.keys())}")
@@ -70,7 +111,13 @@ class SyntheticDataGenerator:
             station = cls._generate_single_station(source, i + 1, error_rate, include_errors)
             stations.append(station)
 
-        return stations  # type: ignore[return-value]
+        # Envolver con la clave correcta según la fuente
+        if source == "valencia":
+            # Valencia espera "estaciones", no "stations"
+            return {"estaciones": stations}
+        else:
+            # Catalunya y Galicia: usa "stations"
+            return {"stations": stations}
 
     @classmethod
     def _generate_single_station(
@@ -80,13 +127,23 @@ class SyntheticDataGenerator:
         error_rate: float,
         include_errors: list[str],
     ) -> dict[str, Any]:
-        """Genera una estación ITV individual."""
+        """
+        Genera una estación ITV individual con formato específico por región.
+        
+        Los datos se generan en el formato que cada transformador espera:
+        - Catalunya: campos catalanes (id, nom, adreca, ciutat, provincia, etc.)
+        - Valencia: campos españoles/valencianos (codigo, nombre, direccion, poblacion, provincia, etc.)
+        - Galicia: campos gallegos (id, nome, enderezo, concello, provincia, etc.)
+        """
         import random
 
         source_info = cls.SOURCES[source]
         prefix = source_info["prefix"]
-        region = source_info["region"]
-
+        
+        # Seleccionar provincia válida para la región
+        provinces = cls.REGION_PROVINCES.get(source, ["BARCELONA", "VALENCIA", "A CORUÑA"])
+        province = random.choice(provinces)
+        
         # ID único por fuente
         station_id = f"{prefix}-{index:06d}"
 
@@ -94,10 +151,8 @@ class SyntheticDataGenerator:
         city = fake.city()
         name = f"ITV {city} - {random.choice(cls.STATION_TYPES)}"
 
-        # Coordenadas (dentro de la región por defecto)
-        region_key = source.lower() if source == "catalunya" else source
-        coords = cls.REGION_COORDS.get(region_key, {"lat_range": (40.0, 43.0), "lon_range": (-3.0, 4.0)})
-
+        # Coordenadas según región
+        coords = cls.REGION_COORDS.get(source, {"lat_range": (40.0, 43.0), "lon_range": (-3.0, 4.0)})
         lat_range, lon_range = coords["lat_range"], coords["lon_range"]
         latitude = round(random.uniform(*lat_range), 4)
         longitude = round(random.uniform(*lon_range), 4)
@@ -106,7 +161,11 @@ class SyntheticDataGenerator:
         phone = fake.phone_number()[:15]
         email = fake.email()
         address = fake.street_address()
-        postal_code = f"{random.randint(1, 99):02d}{random.randint(1, 99):02d}{random.randint(0, 9)}"
+        
+        # Generar postal code válido para la provincia
+        # Primero 2 dígitos según provincia, luego 3 dígitos aleatorios
+        postal_prefix = cls._get_postal_code_prefix(province)
+        postal_code = f"{postal_prefix}{random.randint(0, 999):03d}"
 
         # Inyectar errores probabilísticamente
         should_error = random.random() < error_rate
@@ -114,34 +173,58 @@ class SyntheticDataGenerator:
 
         # Aplicar errores
         if error_type == "invalid_coordinates":
-            # Coordenadas fuera de España
-            latitude = random.uniform(50.0, 60.0)  # Fuera de rango España (36-43.8)
+            latitude = random.uniform(50.0, 60.0)  # Fuera de rango España
             longitude = random.uniform(-5.0, -2.0)
         elif error_type == "missing_field":
-            # Hacer falta un campo obligatorio
             address = None
         elif error_type == "duplicate":
-            # Duplicar ID (será detectado como duplicado)
             station_id = f"{prefix}-000001"
         elif error_type == "malformed_phone":
-            # Teléfono inválido
             phone = "INVALID-PHONE"
 
-        station_data = {
-            "station_id": station_id,
-            "name": name,
-            "source_system": source,
-            "raw_id": station_id,  # El ID original antes de normalización
-            "address": address,
-            "city": city.upper(),  # Normalizar a mayúsculas
-            "province": region.upper(),
-            "postal_code": postal_code,
-            "latitude": latitude,
-            "longitude": longitude,
-            "phone": phone,
-            "email": email,
-            "normalized_at": datetime.now(timezone.utc).isoformat(),
-        }
+        # Generar datos en formato específico por región
+        if source == "catalunya":
+            # formato Catalán
+            station_data = {
+                "id": station_id,
+                "nom": name,
+                "adreca": address,
+                "ciutat": city.upper(),
+                "provincia": province,
+                "codi_postal": postal_code,
+                "latitud": latitude,
+                "longitud": longitude,
+                "telefon": phone,
+                "email": email,
+            }
+        elif source == "valencia":
+            # Formato Valenciano/Español
+            station_data = {
+                "codigo": station_id,
+                "nombre": name,
+                "direccion": address,
+                "poblacion": city.upper(),
+                "provincia": province,
+                "codigo_postal": postal_code,
+                "latitud": latitude,
+                "longitud": longitude,
+                "telefono": phone,
+                "correo": email,
+            }
+        else:  # galicia
+            # Formato Gallego
+            station_data = {
+                "id": station_id,
+                "nome": name,
+                "enderezo": address,
+                "concello": city.upper(),
+                "provincia": province,
+                "cp": postal_code,
+                "lat": latitude,
+                "lon": longitude,
+                "telefono": phone,
+                "email": email,
+            }
 
         return station_data
 
@@ -167,27 +250,34 @@ class SyntheticDataGenerator:
         Returns:
             Payload como string (JSON, XML o CSV)
         """
-        stations = cls.generate_stations(source, count, error_rate)
+        payload = cls.generate_stations(source, count, error_rate)
+        
+        # Extraer la lista de estaciones
+        if source == "valencia":
+            stations = payload.get("estaciones", [])
+        else:
+            stations = payload.get("stations", [])
 
         if format_type == "json":
-            return json.dumps({"stations": stations}, indent=2)
+            return json.dumps(payload, indent=2)
 
         elif format_type == "xml":
             xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <itv_stations source="{source}">
 """
             for station in stations:
-                xml += f"""  <station>
-    <id>{station['station_id']}</id>
-    <name>{station['name']}</name>
-    <address>{station['address']}</address>
-    <city>{station['city']}</city>
-    <province>{station['province']}</province>
-    <postal_code>{station['postal_code']}</postal_code>
-    <latitude>{station['latitude']}</latitude>
-    <longitude>{station['longitude']}</longitude>
-    <phone>{station['phone']}</phone>
-    <email>{station['email']}</email>
+                if source == "catalunya":
+                    xml += f"""  <station>
+    <id>{station.get('id', '')}</id>
+    <nom>{station.get('nom', '')}</nom>
+    <adreca>{station.get('adreca', '')}</adreca>
+    <ciutat>{station.get('ciutat', '')}</ciutat>
+    <provincia>{station.get('provincia', '')}</provincia>
+    <codi_postal>{station.get('codi_postal', '')}</codi_postal>
+    <latitud>{station.get('latitud', '')}</latitud>
+    <longitud>{station.get('longitud', '')}</longitud>
+    <telefon>{station.get('telefon', '')}</telefon>
+    <email>{station.get('email', '')}</email>
   </station>
 """
             xml += "</itv_stations>"
@@ -198,21 +288,14 @@ class SyntheticDataGenerator:
             from io import StringIO
 
             output = StringIO()
-            writer = csv.DictWriter(
-                output,
-                fieldnames=[
-                    "station_id",
-                    "name",
-                    "address",
-                    "city",
-                    "province",
-                    "postal_code",
-                    "latitude",
-                    "longitude",
-                    "phone",
-                    "email",
-                ],
-            )
+            if source == "catalunya":
+                fieldnames = ["id", "nom", "adreca", "ciutat", "provincia", "codi_postal", "latitud", "longitud", "telefon", "email"]
+            elif source == "valencia":
+                fieldnames = ["codigo", "nombre", "direccion", "poblacion", "provincia", "codigo_postal", "latitud", "longitud", "telefono", "correo"]
+            else:  # galicia
+                fieldnames = ["id", "nome", "enderezo", "concello", "provincia", "cp", "lat", "lon", "telefono", "email"]
+            
+            writer = csv.DictWriter(output, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(stations)
             return output.getvalue()
