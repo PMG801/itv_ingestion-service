@@ -112,7 +112,7 @@ def generate_galicia() -> RequestBody:
                     "nome": f"ITV Galicia {uuid4().hex[:4].upper()}",
                     "enderezo": f"Rúa da Industria {random.randint(1, 999)}",
                     "concello": random.choice(["Lugo", "Ourense", "Vigo", "A Coruña"]),
-                    "provincia": random.choice(["Lugo", "Ourense", "Pontevedra", "A Coruña"]),
+                    "provincia": random.choice(["Lugo", "Ourense", "Pontevedra", "La Coruña"]),
                     "cp": _rand_postal(),
                     "lat": round(random.uniform(41.8, 43.8), 4),
                     "lon": round(random.uniform(-9.3, -6.7), 4),

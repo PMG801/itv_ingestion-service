@@ -11,9 +11,12 @@ Utilizado para:
 """
 
 import json
+import random
 from typing import Literal, Optional, Any
 from datetime import datetime, timezone
 from faker import Faker
+
+from domain.itv_stations.rules import PROVINCE_COORDS_RANGE, PROVINCE_POSTAL_CODES
 
 fake = Faker("es_ES")  # Usar locale Español
 
@@ -39,7 +42,7 @@ class SyntheticDataGenerator:
     REGION_PROVINCES = {
         "catalunya": ["BARCELONA", "GIRONA", "LLEIDA", "TARRAGONA"],
         "valencia": ["CASTELLÓN", "VALENCIA", "ALICANTE"],
-        "galicia": ["A CORUÑA", "LUGO", "OURENSE", "PONTEVEDRA"],
+        "galicia": ["LA CORUÑA", "LUGO", "OURENSE", "PONTEVEDRA"],
     }
 
     # Coordenadas por región (aproximadas)
@@ -47,6 +50,26 @@ class SyntheticDataGenerator:
         "catalunya": {"lat_range": (41.0, 42.9), "lon_range": (0.1, 3.3)},
         "valencia": {"lat_range": (38.6, 40.8), "lon_range": (-1.5, -0.1)},
         "galicia": {"lat_range": (42.1, 43.8), "lon_range": (-9.3, -7.0)},
+    }
+
+    PROVINCE_CITIES = {
+        "catalunya": {
+            "BARCELONA": ["Barcelona", "L'Hospitalet de Llobregat", "Badalona", "Terrassa"],
+            "GIRONA": ["Girona", "Figueres", "Blanes", "Olot"],
+            "LLEIDA": ["Lleida", "Tàrrega", "Balaguer", "Mollerussa"],
+            "TARRAGONA": ["Tarragona", "Reus", "Valls", "El Vendrell"],
+        },
+        "valencia": {
+            "VALENCIA": ["Valencia", "Torrent", "Gandia", "Sagunto"],
+            "CASTELLÓN": ["Castellón de la Plana", "Vila-real", "Borriana", "Vinaròs"],
+            "ALICANTE": ["Alicante", "Elche", "Torrevieja", "Elda"],
+        },
+        "galicia": {
+            "LA CORUÑA": ["A Coruña", "Santiago de Compostela", "Ferrol", "Narón"],
+            "LUGO": ["Lugo", "Monforte de Lemos", "Viveiro", "Sarria"],
+            "OURENSE": ["Ourense", "Verín", "O Carballiño", "Barbadás"],
+            "PONTEVEDRA": ["Pontevedra", "Vigo", "Vilagarcía de Arousa", "Lalín"],
+        },
     }
 
 
@@ -57,22 +80,31 @@ class SyntheticDataGenerator:
         
         Basado en PROVINCE_POSTAL_CODES de domain.itv_stations.rules.
         """
-        prefix_map = {
-            "ÁLAVA": "01", "ALBACETE": "02", "ALICANTE": "03", "ALMERÍA": "04",
-            "ÁVILA": "05", "BADAJOZ": "06", "BARCELONA": "08", "BURGOS": "09",
-            "CÁCERES": "10", "CÁDIZ": "11", "CANTABRIA": "39", "CASTELLÓN": "12",
-            "CEUTA": "51", "CIUDAD REAL": "13", "CÓRDOBA": "14", "CUENCA": "16",
-            "GIRONA": "17", "GRANADA": "18", "GUADALAJARA": "19", "GUIPÚZCOA": "20",
-            "HUELVA": "21", "HUESCA": "22", "JAÉN": "23", "LA CORUÑA": "15",
-            "LA RIOJA": "26", "LAS PALMAS": "35", "LEÓN": "24", "LLEIDA": "25",
-            "LUGO": "27", "MADRID": "28", "MÁLAGA": "29", "MELILLA": "52",
-            "MURCIA": "30", "NAVARRA": "31", "OURENSE": "32", "PALENCIA": "34",
-            "PALMA": "07", "PONTEVEDRA": "36", "SALAMANCA": "37", "SEGOVIA": "40",
-            "SEVILLA": "41", "SORIA": "42", "TARRAGONA": "43", "TERUEL": "44",
-            "TOLEDO": "45", "VALENCIA": "46", "VALLADOLID": "47", "VIZCAYA": "48",
-            "ZAMORA": "49", "ZARAGOZA": "50", "A CORUÑA": "15",
-        }
-        return prefix_map.get(province.upper(), "28")  # Default Madrid
+        return PROVINCE_POSTAL_CODES.get(province.upper(), "28")  # Default Madrid
+
+    @classmethod
+    def _get_city_for_province(cls, source: str, province: str) -> str:
+        province_upper = province.upper()
+        source_cities = cls.PROVINCE_CITIES.get(source, {})
+        if province_upper in source_cities:
+            return random.choice(source_cities[province_upper])
+        return fake.city()
+
+    @classmethod
+    def _get_coordinates_for_province(cls, source: str, province: str) -> tuple[float, float]:
+        province_upper = province.upper()
+        bounds = PROVINCE_COORDS_RANGE.get(province_upper)
+        if bounds:
+            return (
+                round(random.uniform(*bounds["lat"]), 4),
+                round(random.uniform(*bounds["lon"]), 4),
+            )
+
+        coords = cls.REGION_COORDS.get(source, {"lat_range": (40.0, 43.0), "lon_range": (-3.0, 4.0)})
+        return (
+            round(random.uniform(*coords["lat_range"]), 4),
+            round(random.uniform(*coords["lon_range"]), 4),
+        )
 
     @classmethod
     def generate_stations(
@@ -135,8 +167,6 @@ class SyntheticDataGenerator:
         - Valencia: campos españoles/valencianos (codigo, nombre, direccion, poblacion, provincia, etc.)
         - Galicia: campos gallegos (id, nome, enderezo, concello, provincia, etc.)
         """
-        import random
-
         source_info = cls.SOURCES[source]
         prefix = source_info["prefix"]
         
@@ -148,14 +178,11 @@ class SyntheticDataGenerator:
         station_id = f"{prefix}-{index:06d}"
 
         # Nombre realista
-        city = fake.city()
+        city = cls._get_city_for_province(source, province)
         name = f"ITV {city} - {random.choice(cls.STATION_TYPES)}"
 
-        # Coordenadas según región
-        coords = cls.REGION_COORDS.get(source, {"lat_range": (40.0, 43.0), "lon_range": (-3.0, 4.0)})
-        lat_range, lon_range = coords["lat_range"], coords["lon_range"]
-        latitude = round(random.uniform(*lat_range), 4)
-        longitude = round(random.uniform(*lon_range), 4)
+        # Coordenadas según provincia para evitar rechazos por límites geográficos
+        latitude, longitude = cls._get_coordinates_for_province(source, province)
 
         # Datos de contacto
         phone = fake.phone_number()[:15]
