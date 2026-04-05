@@ -1,5 +1,5 @@
 """
-Stations Router para lectura de estaciones y provincias desde PostgreSQL.
+Stations Router para lectura de estaciones desde PostgreSQL.
 """
 
 from typing import Any
@@ -41,20 +41,3 @@ async def get_all_stations(
         )
 
     return response  # type: ignore[return-value]
-
-
-@router.get("/api/v1/stations/provinces")
-@router.get("/api/provincias")
-async def get_provinces(session: AsyncSession = Depends(get_async_session)) -> list[dict[str, Any]]:
-    stmt = select(EstacionITV)
-    result = await session.execute(stmt)
-    stations = result.scalars().all()  # type: ignore[assignment]
-
-    provinces: set[str] = set()
-    for station in stations:
-        extra = station.datos_extra or {}
-        province = extra.get("province")
-        if isinstance(province, str) and province.strip():
-            provinces.add(province.strip())
-
-    return [{"id": index + 1, "nombre": name} for index, name in enumerate(sorted(provinces))]

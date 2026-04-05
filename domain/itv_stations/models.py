@@ -27,11 +27,11 @@ from core.database import Base
 class EstacionITV(Base):
     """
     Modelo ORM para estaciones ITV.
-    
+
     Representa una estación de inspección técnica de vehículos con datos normalizados
     de múltiples fuentes (Catalunya, Valencia, Galicia). Incluye campos estructurados
     para consultas eficientes y un campo JSONB flexible para datos adicionales.
-    
+
     Attributes:
         id: Clave primaria autoincremental
         fuente_origen: Sistema fuente ('catalunya', 'valencia', 'galicia')
@@ -48,113 +48,87 @@ class EstacionITV(Base):
         fecha_creacion: Timestamp de primera inserción (UTC)
         fecha_actualizacion: Timestamp de última modificación (UTC, auto-actualizado)
     """
-    
+
     __tablename__ = "estaciones"
     __table_args__ = (
         # Constraint único: evitar duplicados por fuente + ID original
-        UniqueConstraint(
-            "fuente_origen",
-            "id_en_fuente",
-            name="uq_estaciones_fuente_id"
-        ),
+        UniqueConstraint("fuente_origen", "id_en_fuente", name="uq_estaciones_fuente_id"),
         # Validar que fuente_origen sea una de las permitidas
         CheckConstraint(
             "fuente_origen IN ('catalunya', 'valencia', 'galicia')",
-            name="ck_estaciones_fuente_valida"
+            name="ck_estaciones_fuente_valida",
         ),
         # NOTA: Los índices se crean en la migración de Alembic (001_initial.py)
         # para tener control completo sobre tipos especiales (GIN, GIST)
         # Schema PostgreSQL
         {"schema": "itv"},
     )
-    
+
     # Primary Key
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    
+
     # Campos de identificación y origen
     fuente_origen: Mapped[str] = mapped_column(
-        String(50),
-        nullable=False,
-        comment="Sistema fuente de datos"
+        String(50), nullable=False, comment="Sistema fuente de datos"
     )
     id_en_fuente: Mapped[str] = mapped_column(
-        String(100),
-        nullable=False,
-        comment="ID original en el sistema fuente"
+        String(100), nullable=False, comment="ID original en el sistema fuente"
     )
-    
+
     # Datos normalizados obligatorios
     nombre: Mapped[str] = mapped_column(
-        String(255),
-        nullable=False,
-        comment="Nombre de la estación ITV"
+        String(255), nullable=False, comment="Nombre de la estación ITV"
     )
-    
+
     # Coordenadas geográficas (opcionales)
-    latitud: Mapped[Optional[float]] = mapped_column(
-        Float,
-        nullable=True,
-        comment="Latitud WGS84"
-    )
+    latitud: Mapped[Optional[float]] = mapped_column(Float, nullable=True, comment="Latitud WGS84")
     longitud: Mapped[Optional[float]] = mapped_column(
-        Float,
-        nullable=True,
-        comment="Longitud WGS84"
+        Float, nullable=True, comment="Longitud WGS84"
     )
-    
+
     # Geometría PostGIS (generada desde latitud/longitud)
     location: Mapped[Optional[Geometry]] = mapped_column(
         Geometry(geometry_type="POINT", srid=4326),
         nullable=True,
-        comment="Punto geográfico PostGIS (SRID 4326 - WGS84)"
+        comment="Punto geográfico PostGIS (SRID 4326 - WGS84)",
     )
-    
+
     # Datos de contacto (opcionales)
     telefono: Mapped[Optional[str]] = mapped_column(
-        String(20),
-        nullable=True,
-        comment="Número de teléfono"
+        String(20), nullable=True, comment="Número de teléfono"
     )
     email: Mapped[Optional[str]] = mapped_column(
-        String(255),
-        nullable=True,
-        comment="Correo electrónico"
+        String(255), nullable=True, comment="Correo electrónico"
     )
-    
+
     # Dirección (opcional)
     direccion: Mapped[Optional[str]] = mapped_column(
-        Text,
-        nullable=True,
-        comment="Dirección física completa"
+        Text, nullable=True, comment="Dirección física completa"
     )
     codigo_postal: Mapped[Optional[str]] = mapped_column(
-        String(10),
-        nullable=True,
-        comment="Código postal"
+        String(10), nullable=True, comment="Código postal"
     )
-    
+
     # Datos adicionales flexibles (JSONB)
     datos_extra: Mapped[Optional[dict[str, object]]] = mapped_column(
-        JSONB,
-        nullable=True,
-        comment="Campos adicionales no mapeados en estructura JSON"
+        JSONB, nullable=True, comment="Campos adicionales no mapeados en estructura JSON"
     )
-    
+
     # Timestamps de auditoría
     fecha_creacion: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
-        comment="Fecha de creación del registro"
+        comment="Fecha de creación del registro",
     )
     fecha_actualizacion: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
-        comment="Fecha de última actualización (auto-gestionado por trigger)"
+        comment="Fecha de última actualización (auto-gestionado por trigger)",
     )
-    
+
     def __repr__(self) -> str:
         return (
             f"<EstacionITV(id={self.id}, "
@@ -187,8 +161,7 @@ class IngestionLog(Base):
         # NOTA: Los índices se crean en la migración de Alembic (001_initial.py)
         # Validar estados permitidos
         CheckConstraint(
-            "status IN ('success', 'failed', 'processing')",
-            name="ck_ingestion_log_status_valido"
+            "status IN ('success', 'failed', 'processing')", name="ck_ingestion_log_status_valido"
         ),
         # Schema PostgreSQL
         {"schema": "itv"},
@@ -199,36 +172,23 @@ class IngestionLog(Base):
 
     # Identificación del mensaje
     message_id: Mapped[str] = mapped_column(
-        String(255),
-        unique=True,
-        nullable=False,
-        comment="ID único del mensaje RabbitMQ"
+        String(255), unique=True, nullable=False, comment="ID único del mensaje RabbitMQ"
     )
 
     # Clasificación
-    domain: Mapped[str] = mapped_column(
-        String(100),
-        nullable=False,
-        comment="Dominio de negocio"
-    )
+    domain: Mapped[str] = mapped_column(String(100), nullable=False, comment="Dominio de negocio")
     source_system: Mapped[str] = mapped_column(
-        String(100),
-        nullable=False,
-        comment="Sistema fuente de los datos"
+        String(100), nullable=False, comment="Sistema fuente de los datos"
     )
 
     # Estado del procesamiento
     status: Mapped[str] = mapped_column(
-        String(50),
-        nullable=False,
-        comment="Estado: success, failed, processing"
+        String(50), nullable=False, comment="Estado: success, failed, processing"
     )
 
     # Detalles de error (si aplica)
     error_message: Mapped[Optional[str]] = mapped_column(
-        Text,
-        nullable=True,
-        comment="Mensaje de error detallado"
+        Text, nullable=True, comment="Mensaje de error detallado"
     )
 
     # Timestamp
@@ -236,7 +196,7 @@ class IngestionLog(Base):
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
-        comment="Fecha y hora de procesamiento"
+        comment="Fecha y hora de procesamiento",
     )
 
     # Metadata adicional (timing, inyección, rechazos)
@@ -246,7 +206,7 @@ class IngestionLog(Base):
         JSONB,
         nullable=True,
         default={},
-        comment="Metadatos de timing, inyección y trazabilidad"
+        comment="Metadatos de timing, inyección y trazabilidad",
     )
 
     def add_timing(self, step: str, timestamp: Optional[datetime] = None) -> None:
@@ -267,7 +227,9 @@ class IngestionLog(Base):
         ts = timestamp or datetime.now(timezone.utc)
         self.metadata_json["timing"][f"{step}_at"] = ts.isoformat()
 
-    def set_injection_type(self, injection_type: str, metadata_info: dict[str, Any] | None = None) -> None:
+    def set_injection_type(
+        self, injection_type: str, metadata_info: dict[str, Any] | None = None
+    ) -> None:
         """
         Establece el tipo de inyección (api, file, synthetic) y metadatos asociados.
 
@@ -295,7 +257,7 @@ class IngestionLog(Base):
         self.metadata_json["rejection_summary"] = {
             "total_stations": total,
             "rejected_count": rejected,
-            "rejection_reasons": reasons
+            "rejection_reasons": reasons,
         }
 
     def __repr__(self) -> str:
@@ -304,4 +266,3 @@ class IngestionLog(Base):
             f"message_id='{self.message_id}', "
             f"status='{self.status}')>"
         )
-

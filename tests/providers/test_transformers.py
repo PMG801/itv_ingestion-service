@@ -151,9 +151,7 @@ def test_galicia_transformer_tracks_rejected_items_without_id() -> None:
 def test_catalunya_transformer_tracks_rejected_items_without_id() -> None:
     transformer = CatalunyaTransformer()
 
-    stations = transformer.transform(
-        "<stations><station><nom>Sense ID</nom></station></stations>"
-    )
+    stations = transformer.transform("<stations><station><nom>Sense ID</nom></station></stations>")
 
     assert stations == []
     assert len(transformer.rejected_items) == 1
@@ -163,16 +161,16 @@ def test_catalunya_transformer_tracks_rejected_items_without_id() -> None:
 def test_transformer_resets_rejections() -> None:
     """Test that transformers reset rejections."""
     transformer = CatalunyaTransformer()
-    
+
     # First transformation
     transformer.transform("<stations><station><nom>Bad</nom></station></stations>")
     first_count = len(transformer.rejected_items)
     assert first_count > 0
-    
+
     # Reset
     transformer.reset_rejections()
     assert len(transformer.rejected_items) == 0
-    
+
     # Second transformation
     transformer.transform("<stations><station><nom>Bad2</nom></station></stations>")
     assert len(transformer.rejected_items) > 0
@@ -183,7 +181,7 @@ def test_transformer_source_system_is_set() -> None:
     cat = CatalunyaTransformer()
     gal = GaliciaTransformer()
     val = ValenciaTransformer()
-    
+
     assert cat.source_system == "catalunya"
     assert gal.source_system == "galicia"
     assert val.source_system == "valencia"
@@ -195,7 +193,7 @@ def test_transformers_with_multiple_stations_galicia(
     """Test transformers handle multiple stations correctly."""
     transformer = GaliciaTransformer()
     result = transformer.transform(galicia_json_payload)
-    
+
     # Original fixture has 1 station, verify it's a NormalizedStation
     assert len(result) >= 1
     assert all(isinstance(s, NormalizedStation) for s in result)

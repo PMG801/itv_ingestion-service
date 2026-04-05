@@ -60,7 +60,7 @@ def test_calculate_timing_breakdown_with_invalid_timestamps() -> None:
     }
 
     result = _calculate_timing_breakdown(timing)
-    
+
     # Should return dict (possibly empty) without crashing
     assert isinstance(result, dict)
 
@@ -93,7 +93,7 @@ def test_calculate_total_duration_ms_returns_none_on_error() -> None:
 def test_calculate_total_duration_ms_with_empty_timing() -> None:
     """Test that _calculate_total_duration_ms handles empty timing dict."""
     result = _calculate_total_duration_ms({})
-    
+
     # Should return None or 0
     assert result is None or result == 0
 
@@ -124,9 +124,9 @@ def test_percentile_with_single_element() -> None:
 def test_percentile_calculates_p95() -> None:
     """Test that _percentile calculates p95 correctly."""
     values = [float(i) for i in range(100)]
-    
+
     p95 = _percentile(values, 0.95)
-    
+
     # p95 should be around 95
     assert 90 <= p95 <= 97
 
@@ -134,9 +134,9 @@ def test_percentile_calculates_p95() -> None:
 def test_percentile_calculates_p99() -> None:
     """Test that _percentile calculates p99 correctly."""
     values = [float(i) for i in range(100)]
-    
+
     p99 = _percentile(values, 0.99)
-    
+
     # p99 should be around 99
     assert 95 <= p99 <= 99.5
 
@@ -145,8 +145,8 @@ def test_percentile_calculates_p99() -> None:
 def test_percentile_various_percentiles(percentile_val: float) -> None:
     """Test percentile calculation at various percentile values."""
     values = [float(i) for i in range(1, 101)]
-    
+
     result = _percentile(values, percentile_val)
-    
+
     # Result should be within data range
     assert 1.0 <= result <= 100.0

@@ -133,7 +133,9 @@ class RejectedDataReport:
                 "format": data_format,
                 "rejection_level": rejection_level,
                 "raw_payload": raw_payload,
-                "rejected_at": rejected_at.isoformat().replace("+00:00", "Z") if rejected_at else None,
+                "rejected_at": (
+                    rejected_at.isoformat().replace("+00:00", "Z") if rejected_at else None
+                ),
             }
 
     def as_dict(self) -> dict[str, Any]:
@@ -148,12 +150,16 @@ class RejectedDataReport:
             "raw_payload_type_counts": dict(self.raw_payload_type_counts),
             "parse_error_counts": dict(self.parse_error_counts),
             "time_window": {
-                "first_rejected_at": self.first_rejected_at.isoformat().replace("+00:00", "Z")
-                if self.first_rejected_at
-                else None,
-                "last_rejected_at": self.last_rejected_at.isoformat().replace("+00:00", "Z")
-                if self.last_rejected_at
-                else None,
+                "first_rejected_at": (
+                    self.first_rejected_at.isoformat().replace("+00:00", "Z")
+                    if self.first_rejected_at
+                    else None
+                ),
+                "last_rejected_at": (
+                    self.last_rejected_at.isoformat().replace("+00:00", "Z")
+                    if self.last_rejected_at
+                    else None
+                ),
             },
             "sample_by_reason": self.sample_by_reason,
         }
@@ -179,7 +185,9 @@ def render_text_report(report: RejectedDataReport) -> str:
         "",
     ]
 
-    lines.extend(_format_counter("Familias de fallo", report.reason_family_counts, report.total_messages))
+    lines.extend(
+        _format_counter("Familias de fallo", report.reason_family_counts, report.total_messages)
+    )
     lines.append("")
     lines.extend(_format_counter("Motivos exactos", report.reason_counts, report.total_messages))
     lines.append("")
@@ -187,9 +195,15 @@ def render_text_report(report: RejectedDataReport) -> str:
     lines.append("")
     lines.extend(_format_counter("Formato", report.format_counts, report.total_messages))
     lines.append("")
-    lines.extend(_format_counter("Nivel de rechazo", report.rejection_level_counts, report.total_messages))
+    lines.extend(
+        _format_counter("Nivel de rechazo", report.rejection_level_counts, report.total_messages)
+    )
     lines.append("")
-    lines.extend(_format_counter("Tipo de payload crudo", report.raw_payload_type_counts, report.total_messages))
+    lines.extend(
+        _format_counter(
+            "Tipo de payload crudo", report.raw_payload_type_counts, report.total_messages
+        )
+    )
     lines.append("")
 
     if report.first_rejected_at or report.last_rejected_at:

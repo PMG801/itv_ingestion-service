@@ -50,7 +50,7 @@ def test_factory_rejects_invalid_transformer_type() -> None:
 def test_factory_supported_sources_returns_list() -> None:
     """Test that supported_sources returns list of available sources."""
     sources = TransformerFactory.supported_sources()
-    
+
     assert isinstance(sources, list)
     assert "catalunya" in sources
     assert "valencia" in sources

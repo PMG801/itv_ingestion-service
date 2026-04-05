@@ -72,12 +72,11 @@ class SyntheticDataGenerator:
         },
     }
 
-
     @classmethod
     def _get_postal_code_prefix(cls, province: str) -> str:
         """
         Obtiene el prefijo postal correcto (primeros 2 dígitos) para una provincia.
-        
+
         Basado en PROVINCE_POSTAL_CODES de domain.itv_stations.rules.
         """
         return PROVINCE_POSTAL_CODES.get(province.upper(), "28")  # Default Madrid
@@ -100,7 +99,9 @@ class SyntheticDataGenerator:
                 round(random.uniform(*bounds["lon"]), 4),
             )
 
-        coords = cls.REGION_COORDS.get(source, {"lat_range": (40.0, 43.0), "lon_range": (-3.0, 4.0)})
+        coords = cls.REGION_COORDS.get(
+            source, {"lat_range": (40.0, 43.0), "lon_range": (-3.0, 4.0)}
+        )
         return (
             round(random.uniform(*coords["lat_range"]), 4),
             round(random.uniform(*coords["lon_range"]), 4),
@@ -161,7 +162,7 @@ class SyntheticDataGenerator:
     ) -> dict[str, Any]:
         """
         Genera una estación ITV individual con formato específico por región.
-        
+
         Los datos se generan en el formato que cada transformador espera:
         - Catalunya: campos catalanes (id, nom, adreca, ciutat, provincia, etc.)
         - Valencia: campos españoles/valencianos (codigo, nombre, direccion, poblacion, provincia, etc.)
@@ -169,17 +170,18 @@ class SyntheticDataGenerator:
         """
         source_info = cls.SOURCES[source]
         prefix = source_info["prefix"]
-        
+
         # Seleccionar provincia válida para la región
         provinces = cls.REGION_PROVINCES.get(source, ["BARCELONA", "VALENCIA", "A CORUÑA"])
         province = random.choice(provinces)
-        
+
         # ID único por fuente
         station_id = f"{prefix}-{index:06d}"
 
-        # Nombre realista
+        # Nombre realista y único por lote para evitar colisiones dentro del mismo mensaje.
         city = cls._get_city_for_province(source, province)
-        name = f"ITV {city} - {random.choice(cls.STATION_TYPES)}"
+        station_type = random.choice(cls.STATION_TYPES)
+        name = f"ITV {city} - {station_type} {index:04d}"
 
         # Coordenadas según provincia para evitar rechazos por límites geográficos
         latitude, longitude = cls._get_coordinates_for_province(source, province)
@@ -188,7 +190,7 @@ class SyntheticDataGenerator:
         phone = fake.phone_number()[:15]
         email = fake.email()
         address = fake.street_address()
-        
+
         # Generar postal code válido para la provincia
         # Primero 2 dígitos según provincia, luego 3 dígitos aleatorios
         postal_prefix = cls._get_postal_code_prefix(province)
@@ -278,7 +280,7 @@ class SyntheticDataGenerator:
             Payload como string (JSON, XML o CSV)
         """
         payload = cls.generate_stations(source, count, error_rate)
-        
+
         # Extraer la lista de estaciones
         if source == "valencia":
             stations = payload.get("estaciones", [])
@@ -316,12 +318,45 @@ class SyntheticDataGenerator:
 
             output = StringIO()
             if source == "catalunya":
-                fieldnames = ["id", "nom", "adreca", "ciutat", "provincia", "codi_postal", "latitud", "longitud", "telefon", "email"]
+                fieldnames = [
+                    "id",
+                    "nom",
+                    "adreca",
+                    "ciutat",
+                    "provincia",
+                    "codi_postal",
+                    "latitud",
+                    "longitud",
+                    "telefon",
+                    "email",
+                ]
             elif source == "valencia":
-                fieldnames = ["codigo", "nombre", "direccion", "poblacion", "provincia", "codigo_postal", "latitud", "longitud", "telefono", "correo"]
+                fieldnames = [
+                    "codigo",
+                    "nombre",
+                    "direccion",
+                    "poblacion",
+                    "provincia",
+                    "codigo_postal",
+                    "latitud",
+                    "longitud",
+                    "telefono",
+                    "correo",
+                ]
             else:  # galicia
-                fieldnames = ["id", "nome", "enderezo", "concello", "provincia", "cp", "lat", "lon", "telefono", "email"]
-            
+                fieldnames = [
+                    "id",
+                    "nome",
+                    "enderezo",
+                    "concello",
+                    "provincia",
+                    "cp",
+                    "lat",
+                    "lon",
+                    "telefono",
+                    "email",
+                ]
+
             writer = csv.DictWriter(output, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(stations)

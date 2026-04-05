@@ -101,7 +101,7 @@ def test_rabbitmq_client_singleton_pattern() -> None:
     """Test that RabbitMQClient follows singleton pattern."""
     client1 = RabbitMQClient()
     client2 = RabbitMQClient()
-    
+
     assert client1 is client2
 
 
@@ -111,7 +111,7 @@ def test_rabbitmq_client_is_connected_when_connection_none() -> None:
     client = RabbitMQClient()
     # Ensure connection is None
     client.connection = None
-    
+
     assert not client.is_connected
 
 
@@ -120,7 +120,7 @@ def test_rabbitmq_client_is_connected_when_connection_exists() -> None:
     client = RabbitMQClient()
     client.connection = type("Conn", (), {"is_closed": False})()
     client.channel = type("Chan", (), {"is_closed": False})()
-    
+
     assert client.is_connected
 
 
@@ -129,9 +129,7 @@ async def test_consumer_process_message_auto_ack() -> None:
     """Test that auto_ack=True skips manual acknowledgment."""
     consumer = RabbitMQConsumer()
     callback = AsyncMock()
-    message = DummyIncomingMessage(
-        json.dumps({"message_id": "m1"}).encode("utf-8")
-    )
+    message = DummyIncomingMessage(json.dumps({"message_id": "m1"}).encode("utf-8"))
 
     await consumer._process_message(message=message, callback=callback, auto_ack=True)
 
@@ -145,9 +143,7 @@ async def test_consumer_process_message_callback_exception_rejects() -> None:
     """Test that callback exceptions cause message rejection."""
     consumer = RabbitMQConsumer()
     callback = AsyncMock(side_effect=ValueError("Processing error"))
-    message = DummyIncomingMessage(
-        json.dumps({"message_id": "m1"}).encode("utf-8")
-    )
+    message = DummyIncomingMessage(json.dumps({"message_id": "m1"}).encode("utf-8"))
 
     await consumer._process_message(message=message, callback=callback, auto_ack=False)
 
@@ -160,14 +156,8 @@ async def test_consumer_process_message_callback_exception_rejects() -> None:
 async def test_rabbitmq_client_disconnect_clears_state() -> None:
     """Test that disconnect clears client state."""
     client = RabbitMQClient()
-    client.connection = type("Conn", (), {
-        "is_closed": False,
-        "close": AsyncMock()
-    })()
-    client.channel = type("Chan", (), {
-        "is_closed": False,
-        "close": AsyncMock()
-    })()
+    client.connection = type("Conn", (), {"is_closed": False, "close": AsyncMock()})()
+    client.channel = type("Chan", (), {"is_closed": False, "close": AsyncMock()})()
     client.exchanges = {"test": "exchange"}
     client.queues = {"test": "queue"}
 
@@ -191,10 +181,10 @@ async def test_consumer_init() -> None:
 async def test_consumer_consume_raises_without_connect() -> None:
     """Test that consume raises RuntimeError if not connected."""
     consumer = RabbitMQConsumer()
-    
+
     async def dummy_callback(data: dict) -> None:
         pass
-    
+
     with pytest.raises(RuntimeError, match="not connected"):
         await consumer.consume("test_queue", dummy_callback)
 
@@ -203,7 +193,7 @@ async def test_consumer_consume_raises_without_connect() -> None:
 async def test_rabbitmq_client_require_channel() -> None:
     """Test that _require_channel raises when channel is None."""
     client = RabbitMQClient()
-    
+
     with pytest.raises(RuntimeError, match="not initialized"):
         client._require_channel()
 
@@ -212,19 +202,19 @@ async def test_rabbitmq_client_require_channel() -> None:
 async def test_rabbitmq_client_is_connected_false_cases() -> None:
     """Test various false conditions for is_connected."""
     client = RabbitMQClient()
-    
+
     # No connection
     assert not client.is_connected
-    
+
     # Only connection, no channel
     client.connection = type("Conn", (), {"is_closed": False})()
     assert not client.is_connected
-    
+
     # Closed connection
     client.connection = type("Conn", (), {"is_closed": True})()
     client.channel = type("Chan", (), {"is_closed": False})()
     assert not client.is_connected
-    
+
     # Closed channel
     client.connection = type("Conn", (), {"is_closed": False})()
     client.channel = type("Chan", (), {"is_closed": True})()

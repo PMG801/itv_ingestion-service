@@ -13,10 +13,10 @@ from pydantic import BaseModel, Field, field_validator
 class NormalizedStation(BaseModel):
     """
     Universal normalized model for ITV station data.
-    
+
     This is the OUTPUT contract that all transformers must produce,
     ensuring consistency across different data sources (Catalunya, Valencia, Galicia).
-    
+
     Attributes:
         station_id: Unique identifier with source prefix (e.g., CAT_001, VAL_042).
         name: Station name (cleaned and normalized).
@@ -32,7 +32,7 @@ class NormalizedStation(BaseModel):
         raw_id: Original ID from source system (for traceability).
         normalized_at: Timestamp when normalization occurred (UTC).
     """
-    
+
     # Required fields
     station_id: str = Field(
         ...,
@@ -50,7 +50,7 @@ class NormalizedStation(BaseModel):
         ...,
         description="Source system identifier",
     )
-    
+
     # Location fields
     address: Optional[str] = Field(
         None,
@@ -72,21 +72,21 @@ class NormalizedStation(BaseModel):
         description="Spanish postal code (5 digits)",
         pattern=r"^\d{5}$",
     )
-    
+
     # Coordinates (Spain geographic bounds)
     latitude: Optional[float] = Field(
         None,
         description="Latitude coordinate",
-        ge=36.0,   # Spain southern bound
-        le=43.8,   # Spain northern bound
+        ge=36.0,  # Spain southern bound
+        le=43.8,  # Spain northern bound
     )
     longitude: Optional[float] = Field(
         None,
         description="Longitude coordinate",
-        ge=-9.3,   # Spain western bound
-        le=4.3,    # Spain eastern bound
+        ge=-9.3,  # Spain western bound
+        le=4.3,  # Spain eastern bound
     )
-    
+
     # Contact information
     phone: Optional[str] = Field(
         None,
@@ -98,7 +98,7 @@ class NormalizedStation(BaseModel):
         description="Contact email address",
         max_length=100,
     )
-    
+
     # Metadata for traceability
     raw_id: Optional[str] = Field(
         None,
@@ -109,19 +109,19 @@ class NormalizedStation(BaseModel):
         default_factory=lambda: datetime.now(timezone.utc),
         description="Timestamp when normalization occurred (UTC)",
     )
-    
+
     @field_validator("city", "province")
     @classmethod
     def uppercase_location(cls, v: Optional[str]) -> Optional[str]:
         """Ensure city and province are in UPPERCASE for consistency."""
         return v.upper() if v else None
-    
+
     @field_validator("name")
     @classmethod
     def clean_name(cls, v: str) -> str:
         """Clean station name by stripping extra whitespace."""
         return " ".join(v.strip().split())
-    
+
     @field_validator("source_system")
     @classmethod
     def lowercase_source(cls, v: str) -> str:

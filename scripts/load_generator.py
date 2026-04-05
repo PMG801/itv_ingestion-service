@@ -227,6 +227,7 @@ def _build_invalid_payload(source: str, body: RequestBody) -> RequestBody:
 
     return body
 
+
 # ---------------------------------------------------------------------------
 # Async request sender
 # ---------------------------------------------------------------------------
@@ -267,6 +268,7 @@ async def send_request(
             error_key = f"ConnectionError: {type(exc).__name__}"
             logger.warning("Request error: %s", error_key)
             return ("error", source, is_invalid, error_key)
+
 
 # ---------------------------------------------------------------------------
 # Main coroutine
@@ -406,6 +408,7 @@ async def main(args: argparse.Namespace) -> None:
 
     print("=" * 60)
     print()
+
 
 # ---------------------------------------------------------------------------
 # CLI

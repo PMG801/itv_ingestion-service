@@ -8,10 +8,10 @@ from domain.itv_stations.transformers.catalunya import CatalunyaTransformer
 from domain.itv_stations.transformers.valencia import ValenciaTransformer
 from domain.itv_stations.transformers.galicia import GaliciaTransformer
 
-
 # ============================================================================
 # EMAIL VALIDATION TESTS
 # ============================================================================
+
 
 class TestEmailValidation:
     """Test email validation with simple regex."""
@@ -51,6 +51,7 @@ class TestEmailValidation:
 # ============================================================================
 # PROVINCE VALIDATION TESTS
 # ============================================================================
+
 
 class TestProvinceValidation:
     """Test province validation against official Spanish provinces list."""
@@ -99,129 +100,87 @@ class TestProvinceValidation:
 # COORDINATES BY PROVINCE VALIDATION TESTS
 # ============================================================================
 
+
 class TestCoordinatesByProvinceValidation:
     """Test coordinate validation by province bounds."""
 
     def test_coords_barcelona_valid(self) -> None:
         """Test valid coordinates within Barcelona bounds."""
         # Barcelona center approximately 41.3, 2.1
-        assert (
-            ITVValidationRules.validate_coordinates_by_province(41.3, 2.1, "BARCELONA")
-            is True
-        )
+        assert ITVValidationRules.validate_coordinates_by_province(41.3, 2.1, "BARCELONA") is True
 
     def test_coords_barcelona_invalid_too_far_north(self) -> None:
         """Test invalid coordinates north of Barcelona."""
-        assert (
-            ITVValidationRules.validate_coordinates_by_province(43.5, 2.1, "BARCELONA")
-            is False
-        )
+        assert ITVValidationRules.validate_coordinates_by_province(43.5, 2.1, "BARCELONA") is False
 
     def test_coords_valencia_valid(self) -> None:
         """Test valid coordinates within Valencia bounds."""
         # Valencia center approximately 39.4, -0.3
-        assert (
-            ITVValidationRules.validate_coordinates_by_province(39.4, -0.3, "VALENCIA")
-            is True
-        )
+        assert ITVValidationRules.validate_coordinates_by_province(39.4, -0.3, "VALENCIA") is True
 
     def test_coords_valencia_invalid_too_far_south(self) -> None:
         """Test invalid coordinates south of Valencia."""
-        assert (
-            ITVValidationRules.validate_coordinates_by_province(37.0, -0.3, "VALENCIA")
-            is False
-        )
+        assert ITVValidationRules.validate_coordinates_by_province(37.0, -0.3, "VALENCIA") is False
 
     def test_coords_missing_latitude(self) -> None:
         """Test that missing latitude is invalid."""
-        assert (
-            ITVValidationRules.validate_coordinates_by_province(None, 2.1, "BARCELONA")
-            is False
-        )
+        assert ITVValidationRules.validate_coordinates_by_province(None, 2.1, "BARCELONA") is False
 
     def test_coords_missing_longitude(self) -> None:
         """Test that missing longitude is invalid."""
-        assert (
-            ITVValidationRules.validate_coordinates_by_province(41.3, None, "BARCELONA")
-            is False
-        )
+        assert ITVValidationRules.validate_coordinates_by_province(41.3, None, "BARCELONA") is False
 
     def test_coords_missing_province(self) -> None:
         """Test that missing province falls back to Spain bounds check."""
-        assert (
-            ITVValidationRules.validate_coordinates_by_province(41.3, 2.1, None)
-            is False
-        )
+        assert ITVValidationRules.validate_coordinates_by_province(41.3, 2.1, None) is False
 
     def test_coords_unknown_province_falls_back_to_spain(self) -> None:
         """Test that unknown province falls back to general Spain bounds."""
         # Within general Spain bounds: lat 36-43.8, lon -9.3 to 4.3
-        assert (
-            ITVValidationRules.validate_coordinates_by_province(41.0, 2.0, "UNKNOWNPROV")
-            is True
-        )
+        assert ITVValidationRules.validate_coordinates_by_province(41.0, 2.0, "UNKNOWNPROV") is True
 
 
 # ============================================================================
 # POSTAL CODE BY PROVINCE VALIDATION TESTS
 # ============================================================================
 
+
 class TestPostalCodeByProvinceValidation:
     """Test postal code validation against province prefix."""
 
     def test_postal_code_barcelona_valid(self) -> None:
         """Test valid postal code for Barcelona (08xxx)."""
-        assert (
-            ITVValidationRules.validate_postal_code_by_province("08025", "BARCELONA")
-            is True
-        )
+        assert ITVValidationRules.validate_postal_code_by_province("08025", "BARCELONA") is True
 
     def test_postal_code_barcelona_invalid(self) -> None:
         """Test invalid postal code for Barcelona (should be 08xxx)."""
-        assert (
-            ITVValidationRules.validate_postal_code_by_province("28001", "BARCELONA")
-            is False
-        )
+        assert ITVValidationRules.validate_postal_code_by_province("28001", "BARCELONA") is False
 
     def test_postal_code_madrid_valid(self) -> None:
         """Test valid postal code for Madrid (28xxx)."""
-        assert (
-            ITVValidationRules.validate_postal_code_by_province("28001", "MADRID")
-            is True
-        )
+        assert ITVValidationRules.validate_postal_code_by_province("28001", "MADRID") is True
 
     def test_postal_code_valencia_valid(self) -> None:
         """Test valid postal code for Valencia (46xxx)."""
-        assert (
-            ITVValidationRules.validate_postal_code_by_province("46015", "VALENCIA")
-            is True
-        )
+        assert ITVValidationRules.validate_postal_code_by_province("46015", "VALENCIA") is True
 
     def test_postal_code_missing(self) -> None:
         """Test that missing postal code is invalid."""
-        assert (
-            ITVValidationRules.validate_postal_code_by_province(None, "BARCELONA")
-            is False
-        )
+        assert ITVValidationRules.validate_postal_code_by_province(None, "BARCELONA") is False
 
     def test_postal_code_unknown_province_allows(self) -> None:
         """Test that unknown province allows any postal code."""
-        assert (
-            ITVValidationRules.validate_postal_code_by_province("12345", "UNKNOWNPROV")
-            is True
-        )
+        assert ITVValidationRules.validate_postal_code_by_province("12345", "UNKNOWNPROV") is True
 
     def test_postal_code_wrong_length(self) -> None:
         """Test that postal code with wrong length is invalid."""
-        assert (
-            ITVValidationRules.validate_postal_code_by_province("040", "BARCELONA")
-            is False
-        )
+        assert ITVValidationRules.validate_postal_code_by_province("040", "BARCELONA") is False
 
 
 # ============================================================================
 # CONTACT MINIMUM VALIDATION TESTS
 # ============================================================================
+
 
 class TestContactMinimumValidation:
     """Test minimum contact and location requirements."""
@@ -343,13 +302,14 @@ class TestContactMinimumValidation:
 # INTEG RATION TESTS: TRANSFORMER VALIDATION
 # ============================================================================
 
+
 class TestTransformerValidation:
     """Test that transformers apply validation rules."""
 
     def test_transformer_rejects_station_invalid_email(self) -> None:
         """Test that transformer rejects station with invalid email."""
         transformer = CatalunyaTransformer()
-        
+
         invalid_station_data = {
             "id": "TEST-001",
             "nom": "ITV Test",
@@ -362,9 +322,9 @@ class TestTransformerValidation:
             "telefon": "932123456",
             "email": "invalid-email-format",
         }
-        
+
         result = transformer.transform([invalid_station_data])
-        
+
         assert len(result) == 0
         assert len(transformer.rejected_items) == 1
         assert transformer.rejected_items[0]["reason"] == "invalid_email_format"
@@ -372,7 +332,7 @@ class TestTransformerValidation:
     def test_transformer_rejects_station_invalid_province(self) -> None:
         """Test that transformer rejects station with invalid province."""
         transformer = ValenciaTransformer()
-        
+
         invalid_station = {
             "codigo": "VAL-001",
             "nombre": "ITV Test",
@@ -385,9 +345,9 @@ class TestTransformerValidation:
             "telefono": "963456789",
             "correo": "info@test.es",
         }
-        
+
         result = transformer.transform({"estaciones": [invalid_station]})
-        
+
         assert len(result) == 0
         assert len(transformer.rejected_items) == 1
         assert transformer.rejected_items[0]["reason"] == "invalid_province"
@@ -395,7 +355,7 @@ class TestTransformerValidation:
     def test_transformer_rejects_station_insufficient_contact(self) -> None:
         """Test that transformer rejects station without contact info."""
         transformer = GaliciaTransformer()
-        
+
         no_contact_station = {
             "id": "GAL-001",
             "nome": "ITV Test",
@@ -408,9 +368,9 @@ class TestTransformerValidation:
             "telefono": None,
             "email": None,
         }
-        
+
         result = transformer.transform([no_contact_station])
-        
+
         assert len(result) == 0
         assert len(transformer.rejected_items) == 1
         assert transformer.rejected_items[0]["reason"] == "insufficient_contact_or_location"
@@ -418,7 +378,7 @@ class TestTransformerValidation:
     def test_transformer_accepts_station_valid_all(self) -> None:
         """Test that transformer accepts completely valid station."""
         transformer = CatalunyaTransformer()
-        
+
         valid_station = {
             "id": "CAT-001",
             "nom": "ITV Barcelona Test",
@@ -431,9 +391,9 @@ class TestTransformerValidation:
             "telefon": "932123456",
             "email": "info@itvbarcelona.cat",
         }
-        
+
         result = transformer.transform([valid_station])
-        
+
         assert len(result) == 1
         assert result[0].station_id == "CAT_CAT-001"
         assert result[0].name == "ITV Barcelona Test"
@@ -443,13 +403,14 @@ class TestTransformerValidation:
 # DEDUPLICATION TESTS
 # ============================================================================
 
+
 class TestDuplicateWithinMessageDetection:
     """Test duplicate detection within a message."""
 
     def test_duplicate_id_within_message(self) -> None:
         """Test detection of duplicate station IDs."""
         transformer = CatalunyaTransformer()
-        
+
         stations = [
             {
                 "id": "DUP-001",
@@ -476,21 +437,18 @@ class TestDuplicateWithinMessageDetection:
                 "email": "b@test.es",
             },
         ]
-        
+
         result = transformer.transform(stations)
-        
+
         # Only one station should be kept
         assert len(result) == 1
         # One rejection recorded for duplicate
-        assert any(
-            r["reason"] == "duplicate_id_within_message"
-            for r in transformer.rejected_items
-        )
+        assert any(r["reason"] == "duplicate_id_within_message" for r in transformer.rejected_items)
 
     def test_duplicate_name_city_within_message(self) -> None:
         """Test detection of duplicate name+city combinations."""
         transformer = ValenciaTransformer()
-        
+
         stations = [
             {
                 "codigo": "VAL-001",
@@ -517,15 +475,14 @@ class TestDuplicateWithinMessageDetection:
                 "correo": "b@test.es",
             },
         ]
-        
+
         result = transformer.transform({"estaciones": stations})
-        
+
         # Only one station should be kept
         assert len(result) == 1
         # One rejection for duplicate name+city
         assert any(
-            r["reason"] == "duplicate_name_city_within_message"
-            for r in transformer.rejected_items
+            r["reason"] == "duplicate_name_city_within_message" for r in transformer.rejected_items
         )
 
 
@@ -535,7 +492,7 @@ class TestDuplicateContactFieldsDetection:
     def test_duplicate_phone_within_message(self) -> None:
         """Test detection of duplicate phone numbers."""
         transformer = GaliciaTransformer()
-        
+
         stations = [
             {
                 "id": "GAL-001",
@@ -562,21 +519,18 @@ class TestDuplicateContactFieldsDetection:
                 "email": "b@test.gal",
             },
         ]
-        
+
         result = transformer.transform(stations)
-        
+
         # Only one station should be kept
         assert len(result) == 1
         # One rejection for duplicate phone
-        assert any(
-            r["reason"] == "duplicate_phone_in_message"
-            for r in transformer.rejected_items
-        )
+        assert any(r["reason"] == "duplicate_phone_in_message" for r in transformer.rejected_items)
 
     def test_duplicate_email_within_message(self) -> None:
         """Test detection of duplicate email addresses."""
         transformer = CatalunyaTransformer()
-        
+
         stations = [
             {
                 "id": "CAT-001",
@@ -603,13 +557,10 @@ class TestDuplicateContactFieldsDetection:
                 "email": "shared@test.cat",  # DUPLICATE EMAIL
             },
         ]
-        
+
         result = transformer.transform(stations)
-        
+
         # Only one station should be kept
         assert len(result) == 1
         # One rejection for duplicate email
-        assert any(
-            r["reason"] == "duplicate_email_in_message"
-            for r in transformer.rejected_items
-        )
+        assert any(r["reason"] == "duplicate_email_in_message" for r in transformer.rejected_items)

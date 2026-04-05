@@ -29,10 +29,10 @@ logger = logging.getLogger(__name__)
 class RabbitMQClient:
     """
     Singleton client for managing RabbitMQ connections and operations.
-    
+
     This client handles connection lifecycle, topology declaration (exchanges,
     queues, bindings), and message publishing with persistence and error handling.
-    
+
     Attributes:
         connection: aio-pika robust connection to RabbitMQ.
         channel: aio-pika channel for operations.
@@ -70,10 +70,10 @@ class RabbitMQClient:
     async def connect(self) -> None:
         """
         Establish connection to RabbitMQ and declare topology.
-        
+
         Creates a robust connection (auto-reconnect), opens a channel, and
         declares all required exchanges, queues, and bindings idempotently.
-        
+
         Topology declared:
             - Exchange: raw_data (topic, durable)
             - Exchange: normalized_data (topic, durable)
@@ -83,7 +83,7 @@ class RabbitMQClient:
             - Queue: dlq.raw_data.itv_stations (Dead Letter Queue)
             - Queue: dlq.normalized_data.itv_stations (Dead Letter Queue)
             - Bindings with routing_key: itv_stations
-        
+
         Raises:
             aio_pika.exceptions.AMQPException: If connection fails.
         """
@@ -91,7 +91,7 @@ class RabbitMQClient:
             # Get container/hostname for connection traceability
             container_name = socket.gethostname()
             connection_name = f"{settings.APP_NAME}-{container_name}"
-            
+
             logger.info(
                 f"Connecting to RabbitMQ at {settings.RABBITMQ_HOST}:"
                 f"{settings.RABBITMQ_PORT}/{settings.RABBITMQ_VHOST} "
@@ -129,7 +129,7 @@ class RabbitMQClient:
     async def _declare_topology(self) -> None:
         """
         Declare exchanges, queues, and bindings idempotently.
-        
+
         This method is idempotent - it can be called multiple times without
         side effects. RabbitMQ will not recreate existing resources.
         """
@@ -251,13 +251,17 @@ class RabbitMQClient:
             exchange=normalized_data_exchange,
             routing_key="itv_stations",
         )
-        logger.debug("Bound normalized_data.itv_stations -> normalized_data exchange (routing_key: itv_stations)")
+        logger.debug(
+            "Bound normalized_data.itv_stations -> normalized_data exchange (routing_key: itv_stations)"
+        )
 
         await rejected_queue.bind(
             exchange=rejected_data_exchange,
             routing_key="itv_stations",
         )
-        logger.debug("Bound rejected_data.itv_stations -> rejected_data exchange (routing_key: itv_stations)")
+        logger.debug(
+            "Bound rejected_data.itv_stations -> rejected_data exchange (routing_key: itv_stations)"
+        )
 
         logger.info("RabbitMQ topology declared successfully")
 
@@ -269,15 +273,15 @@ class RabbitMQClient:
     ) -> None:
         """
         Publish a message to RabbitMQ with persistence.
-        
+
         Serializes the message to JSON and publishes it with DeliveryMode.PERSISTENT
         to ensure messages survive broker restarts.
-        
+
         Args:
             message: Dictionary to serialize and publish.
             exchange_name: Name of the target exchange.
             routing_key: Routing key for message routing.
-            
+
         Raises:
             ValueError: If exchange doesn't exist or channel not initialized.
             aio_pika.exceptions.AMQPException: If publish fails.
@@ -307,8 +311,7 @@ class RabbitMQClient:
             )
 
             logger.debug(
-                f"Published message to exchange='{exchange_name}', "
-                f"routing_key='{routing_key}'"
+                f"Published message to exchange='{exchange_name}', " f"routing_key='{routing_key}'"
             )
 
         except Exception as e:
@@ -321,7 +324,7 @@ class RabbitMQClient:
     async def disconnect(self) -> None:
         """
         Close RabbitMQ connection gracefully.
-        
+
         Closes the channel and connection. Should be called during
         application shutdown.
         """
@@ -357,5 +360,3 @@ class RabbitMQClient:
 from core.messaging.consumer import RabbitMQConsumer  # noqa: E402
 
 __all__ = ["RabbitMQClient", "RabbitMQConsumer"]
-
-

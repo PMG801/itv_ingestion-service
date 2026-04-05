@@ -24,7 +24,7 @@ from apps.normalizer.schemas import RejectedStationMessage
 # Configure logging
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL.upper()),
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
@@ -32,19 +32,19 @@ logger = logging.getLogger(__name__)
 class NormalizerWorker:
     """
     Main normalizer worker that processes raw messages.
-    
+
     This worker:
     1. Consumes raw messages from raw_data.itv_stations queue
     2. Selects appropriate transformer based on source_system
     3. Transforms raw data to NormalizedStation format
     4. Publishes normalized data to normalized_data.itv_stations queue
-    
+
     Attributes:
         consumer: RabbitMQ consumer for reading messages.
         publisher: RabbitMQ client for publishing messages.
         factory: Transformer factory for creating source-specific transformers.
     """
-    
+
     def __init__(self) -> None:
         """Initialize the normalizer worker."""
         self.consumer = RabbitMQConsumer()
@@ -54,11 +54,11 @@ class NormalizerWorker:
         self.messages_failed = 0
         self.messages_rejected = 0
         self.stations_rejected = 0
-    
+
     async def start(self) -> None:
         """
         Start the worker.
-        
+
         Connects to RabbitMQ and starts consuming messages from the
         raw_data.itv_stations queue.
         """
@@ -71,33 +71,33 @@ class NormalizerWorker:
         logger.info(f"Output exchange: normalized_data")
         logger.info(f"Supported sources: {', '.join(self.factory.supported_sources())}")
         logger.info("=" * 60)
-        
+
         try:
             # Connect consumer and publisher
             await self.consumer.connect()
             await self.publisher.connect()
-            
+
             logger.info("✅ Connected to RabbitMQ - Ready to process messages")
-            
+
             # DLX configuration - must match queue creation arguments
             dlx_args = {
                 "x-dead-letter-exchange": "dlx",
                 "x-dead-letter-routing-key": "dlx.raw_data.itv_stations",
             }
-            
+
             # Start consuming messages
             await self.consumer.consume(
                 queue_name="raw_data.itv_stations",
                 callback=self.process_message,
                 arguments=dlx_args,
             )
-            
+
         except KeyboardInterrupt:
             logger.info("Received shutdown signal (Ctrl+C)")
         except Exception as e:
             logger.error(f"Fatal error in normalizer worker: {e}", exc_info=True)
             raise
-    
+
     async def process_message(self, message: dict[str, Any]) -> None:
         """
         Process a single raw message.
@@ -125,16 +125,13 @@ class NormalizerWorker:
         normalizer_started_at = datetime.now(timezone.utc)
 
         logger.info(
-            f"📥 Processing message {message_id} | "
-            f"source={source} | format={data_format}"
+            f"📥 Processing message {message_id} | " f"source={source} | format={data_format}"
         )
 
         try:
             # Validate message structure
             if not source or not payload:
-                raise ValueError(
-                    f"Invalid message structure: missing source or payload"
-                )
+                raise ValueError(f"Invalid message structure: missing source or payload")
             if source not in {"catalunya", "valencia", "galicia"}:
                 raise ValueError(f"Invalid source in message: {source}")
             if data_format not in {"json", "xml", "csv"}:
@@ -146,9 +143,7 @@ class NormalizerWorker:
             # Get appropriate transformer for this source
             transformer = self.factory.create(source)
 
-            logger.debug(
-                f"Using {transformer.__class__.__name__} for source={source}"
-            )
+            logger.debug(f"Using {transformer.__class__.__name__} for source={source}")
 
             # Transform raw data to normalized format
             normalized_stations = transformer.transform(payload)
@@ -176,9 +171,7 @@ class NormalizerWorker:
             self.stations_rejected += len(transformer_rejections)
 
             if not normalized_stations:
-                logger.warning(
-                    f"⚠️  No stations extracted from message {message_id}"
-                )
+                logger.warning(f"⚠️  No stations extracted from message {message_id}")
                 if not transformer_rejections:
                     await self._publish_rejected(
                         message_id=message_id,
@@ -192,9 +185,7 @@ class NormalizerWorker:
                 self.messages_processed += 1
                 return
 
-            logger.info(
-                f"✅ Transformed {len(normalized_stations)} stations from {source}"
-            )
+            logger.info(f"✅ Transformed {len(normalized_stations)} stations from {source}")
 
             # TIMING: Capturar cuando finaliza la transformación
             normalizer_completed_at = datetime.now(timezone.utc)
@@ -218,9 +209,7 @@ class NormalizerWorker:
                     )
                     published_count += 1
                 except Exception as e:
-                    logger.error(
-                        f"Failed to publish station {station.station_id}: {e}"
-                    )
+                    logger.error(f"Failed to publish station {station.station_id}: {e}")
                     # Continue with other stations
                     continue
 
@@ -242,25 +231,20 @@ class NormalizerWorker:
 
         except ValueError as e:
             # Validation or transformation error - log and fail
-            logger.error(
-                f"❌ Validation error for message {message_id}: {e}"
-            )
+            logger.error(f"❌ Validation error for message {message_id}: {e}")
             self.messages_failed += 1
             raise  # Re-raise to send to DLQ
 
         except Exception as e:
             # Unexpected error - log and fail
-            logger.error(
-                f"❌ Error processing message {message_id}: {e}",
-                exc_info=True
-            )
+            logger.error(f"❌ Error processing message {message_id}: {e}", exc_info=True)
             self.messages_failed += 1
             raise  # Re-raise to send to DLQ
-    
+
     async def shutdown(self) -> None:
         """
         Graceful shutdown of the worker.
-        
+
         Closes RabbitMQ connections and logs final statistics.
         """
         logger.info("=" * 60)
@@ -271,7 +255,7 @@ class NormalizerWorker:
         logger.info(f"  - Messages rejected: {self.messages_rejected}")
         logger.info(f"  - Stations rejected: {self.stations_rejected}")
         logger.info("=" * 60)
-        
+
         try:
             await self.consumer.disconnect()
             await self.publisher.disconnect()
@@ -313,7 +297,7 @@ class NormalizerWorker:
 async def main():
     """Main entry point for the normalizer worker."""
     worker = NormalizerWorker()
-    
+
     try:
         await worker.start()
     except KeyboardInterrupt:

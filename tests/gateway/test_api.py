@@ -79,11 +79,10 @@ async def test_ingest_endpoint_returns_503_when_rabbitmq_is_unavailable(
 
 
 @pytest.mark.asyncio
-async def test_list_sources_returns_supported_providers(ingest_client: AsyncClient) -> None:
+async def test_list_sources_endpoint_is_removed(ingest_client: AsyncClient) -> None:
     response = await ingest_client.get("/api/v1/sources")
 
-    assert response.status_code == 200
-    assert response.json()["sources"] == ["catalunya", "valencia", "galicia"]
+    assert response.status_code == 404
 
 
 @pytest.mark.asyncio

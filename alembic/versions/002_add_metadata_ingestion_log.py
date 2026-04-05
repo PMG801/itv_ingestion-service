@@ -12,6 +12,7 @@ Esta migración extiende la tabla ingestion_log con:
    - Snapshots de profundidad de colas
 2. Índice GIN en metadata para queries eficientes
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -19,8 +20,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '002_add_metadata'
-down_revision: Union[str, None] = '001_initial'
+revision: str = "002_add_metadata"
+down_revision: Union[str, None] = "001_initial"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -31,25 +32,25 @@ def upgrade() -> None:
     """
     # Agregar columna metadata JSONB con default vacío
     op.add_column(
-        'ingestion_log',
+        "ingestion_log",
         sa.Column(
-            'metadata',
+            "metadata",
             postgresql.JSONB(astext_type=sa.Text()),
             nullable=True,
-            server_default='{}',
-            comment='Metadatos de timing, inyección y trazabilidad (JSONB)'
+            server_default="{}",
+            comment="Metadatos de timing, inyección y trazabilidad (JSONB)",
         ),
-        schema='itv'
+        schema="itv",
     )
 
     # Crear índice GIN en metadata para queries eficientes en JSONB
     op.create_index(
-        'idx_ingestion_log_metadata',
-        'ingestion_log',
-        ['metadata'],
+        "idx_ingestion_log_metadata",
+        "ingestion_log",
+        ["metadata"],
         unique=False,
-        schema='itv',
-        postgresql_using='gin'
+        schema="itv",
+        postgresql_using="gin",
     )
 
 
@@ -58,7 +59,7 @@ def downgrade() -> None:
     Revertir los cambios: eliminar índice y columna metadata.
     """
     # Eliminar índice
-    op.drop_index('idx_ingestion_log_metadata', table_name='ingestion_log', schema='itv')
+    op.drop_index("idx_ingestion_log_metadata", table_name="ingestion_log", schema="itv")
 
     # Eliminar columna metadata
-    op.drop_column('ingestion_log', 'metadata', schema='itv')
+    op.drop_column("ingestion_log", "metadata", schema="itv")

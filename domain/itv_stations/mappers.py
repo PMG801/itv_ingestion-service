@@ -16,20 +16,20 @@ def normalized_station_to_orm(
 ) -> EstacionITV:
     """
     Convierte un NormalizedStation (Pydantic) a EstacionITV (ORM).
-    
+
     Realiza las siguientes transformaciones:
     1. Mapeo directo de campos estructurados
     2. Construcción de geometría PostGIS desde latitud/longitud
     3. Población de datos_extra JSONB con información no mapeada
-    
+
     Args:
         schema: Instancia de NormalizedStation (output del Normalizer)
         datos_extra_adicionales: Diccionario opcional con datos extra
             que no están en NormalizedStation pero quieres guardar
-    
+
     Returns:
         EstacionITV: Instancia ORM lista para persistir
-    
+
     Example:
         >>> from domain.itv_stations.schemas import NormalizedStation
         >>> normalized = NormalizedStation(
@@ -43,7 +43,7 @@ def normalized_station_to_orm(
         >>> print(orm_instance.nombre)
         'Estación Barcelona Norte'
     """
-    
+
     # ========================================================================
     # 1. Crear geometría PostGIS desde coordenadas
     # ========================================================================
@@ -53,7 +53,7 @@ def normalized_station_to_orm(
         shapely_point = Point(schema.longitude, schema.latitude)
         # Convertir a WKBElement de GeoAlchemy2 con SRID 4326 (WGS84)
         location = from_shape(shapely_point, srid=4326)
-    
+
     # ========================================================================
     # 2. Construir datos_extra JSONB
     # ========================================================================
@@ -65,21 +65,21 @@ def normalized_station_to_orm(
         # Timestamp de normalización original
         "normalized_at": schema.normalized_at.isoformat(),
     }
-    
+
     # Añadir city y province si están presentes (no tenemos columnas para ellos)
     if schema.city:
         datos_extra["city"] = schema.city
     if schema.province:
         datos_extra["province"] = schema.province
-    
+
     # Añadir raw_id para trazabilidad
     if schema.raw_id:
         datos_extra["raw_id"] = schema.raw_id
-    
+
     # Merge con datos adicionales si se proporcionan
     if datos_extra_adicionales:
         datos_extra.update(datos_extra_adicionales)
-    
+
     now = datetime.now(timezone.utc)
 
     # ========================================================================
@@ -89,43 +89,37 @@ def normalized_station_to_orm(
         # Identificación y origen
         fuente_origen=schema.source_system,
         id_en_fuente=schema.station_id,  # station_id es único por fuente
-        
         # Datos principales
         nombre=schema.name,
-        
         # Coordenadas
         latitud=schema.latitude,
         longitud=schema.longitude,
         location=location,
-        
         # Contacto
         telefono=schema.phone,
         email=schema.email,
-        
         # Dirección
         direccion=schema.address,
         codigo_postal=schema.postal_code,
-        
         # Datos flexibles
         datos_extra=datos_extra,
-        
         # Timestamps (fecha_creacion tendrá default, fecha_actualizacion por trigger)
         fecha_creacion=now,
         fecha_actualizacion=now,
     )
-    
+
     return estacion
 
 
 def extract_datos_no_mapeados(schema: NormalizedStation) -> dict[str, object]:
     """
     Extrae campos de NormalizedStation que NO tienen columna dedicada.
-    
+
     Útil si quieres separar claramente qué va a datos_extra.
-    
+
     Args:
         schema: Instancia de NormalizedStation
-    
+
     Returns:
         dict: Campos no mapeados en estructura de BD
     """
@@ -135,4 +129,3 @@ def extract_datos_no_mapeados(schema: NormalizedStation) -> dict[str, object]:
         "raw_id": schema.raw_id,
         "normalized_at": schema.normalized_at.isoformat(),
     }
-

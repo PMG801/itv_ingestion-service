@@ -18,7 +18,7 @@ async def monitoring_client() -> AsyncClient:
     test_app = FastAPI()
     test_app.include_router(monitoring.router)
     transport = ASGITransport(app=test_app)
-    
+
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         client.app = test_app
         yield client
@@ -91,7 +91,6 @@ async def test_get_metrics_endpoint_returns_aggregated_metrics(
         new_callable=AsyncMock,
     ) as mock_get_metrics:
         mock_get_metrics.return_value = {
-            "success_rate_percent": 95.5,
             "total_messages": 200,
             "successful": 191,
             "failed": 9,
@@ -99,15 +98,10 @@ async def test_get_metrics_endpoint_returns_aggregated_metrics(
             "avg_latency_ms": 1500.25,
             "p95_latency_ms": 2100.0,
             "p99_latency_ms": 2800.5,
-            "error_rate_by_source": {
-                "catalunya": 2.5,
-                "valencia": 4.0,
-                "galicia": 3.2,
-            },
             "per_source_stats": {
-                "catalunya": {"total": 100, "successful": 98, "failed": 2, "rate": 98.0},
-                "valencia": {"total": 50, "successful": 48, "failed": 2, "rate": 96.0},
-                "galicia": {"total": 50, "successful": 45, "failed": 5, "rate": 90.0},
+                "catalunya": {"total": 100, "successful": 98, "failed": 2},
+                "valencia": {"total": 50, "successful": 48, "failed": 2},
+                "galicia": {"total": 50, "successful": 45, "failed": 5},
             },
             "top_rejection_reasons": [
                 {"reason": "invalid_coordinates", "count": 5, "percentage": 55.5},
@@ -120,7 +114,6 @@ async def test_get_metrics_endpoint_returns_aggregated_metrics(
 
         assert response.status_code == 200
         body = response.json()
-        assert body["success_rate_percent"] == 95.5
         assert body["total_messages"] == 200
         assert body["period_hours"] == 24
         assert body["avg_latency_ms"] == 1500.25
@@ -139,14 +132,17 @@ async def test_get_metrics_endpoint_returns_empty_metrics_when_no_data(
         new_callable=AsyncMock,
     ) as mock_get_metrics:
         mock_get_metrics.return_value = {
-            "success_rate_percent": 0.0,
             "total_messages": 0,
+            "successful": 0,
+            "failed": 0,
             "period_hours": 24,
             "avg_latency_ms": 0,
             "p95_latency_ms": 0,
             "p99_latency_ms": 0,
-            "error_rate_by_source": {},
             "per_source_stats": {},
+            "queue_depths": {},
+            "top_rejection_reasons": [],
+            "timestamp": "2026-03-21T12:00:00+00:00",
         }
 
         response = await monitoring_client.get("/api/v1/monitoring/metrics")

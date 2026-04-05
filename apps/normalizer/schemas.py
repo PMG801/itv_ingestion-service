@@ -5,7 +5,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
 RejectedRaw = dict[str, object] | str
 
 
@@ -16,9 +15,7 @@ class RejectedStationMessage(BaseModel):
     source: Literal["catalunya", "valencia", "galicia"] = Field(
         ..., description="Original source identifier"
     )
-    format: Literal["json", "xml", "csv"] = Field(
-        ..., description="Original payload format"
-    )
+    format: Literal["json", "xml", "csv"] = Field(..., description="Original payload format")
     reason: str = Field(..., description="Machine-readable rejection reason")
     rejection_level: Literal["message", "station"] = Field(
         ..., description="Whether rejection applies to whole message or one station"

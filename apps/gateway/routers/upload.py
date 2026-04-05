@@ -3,13 +3,12 @@ Upload Router para inyección de datos (archivos y sintéticos).
 
 Proporciona endpoints para:
 1. Carga de archivos (CSV, JSON, XML)
-2. Inyección de datos sintéticos controlados
-3. Benchmarking con error injection
+2. Inyección de datos sintéticos
 
 Todos los datos se publican a raw_data exchange para procesamiento asíncrono.
 """
 
-from typing import Optional, Any
+from typing import Any
 from uuid import uuid4
 from datetime import datetime, timezone
 import json
@@ -30,8 +29,6 @@ async def inject_synthetic_data(
     request: Request,
     source: str,
     count: int = Query(10, ge=1, le=10000),
-    error_rate: float = Query(0.0, ge=0.0, le=1.0),
-    include_errors: Optional[list[str]] = Query(None),
     session: AsyncSession = Depends(get_async_session),
 ) -> dict[str, Any]:
     """
@@ -44,15 +41,9 @@ async def inject_synthetic_data(
 
     Query Parameters:
         count: Número de estaciones a generar (1-10000, default 10)
-        error_rate: Probabilidad de error en cada generada (0.0-1.0, default 0.0)
-        include_errors: Lista de tipos de error a inyectar (opcional)
-            - invalid_coordinates
-            - missing_field
-            - duplicate
-            - malformed_phone
 
     Example:
-        POST /api/v1/inject/synthetic/catalunya?count=50&error_rate=0.1
+        POST /api/v1/inject/synthetic/catalunya?count=50
 
     Returns: {
         "status": "accepted",
@@ -67,11 +58,11 @@ async def inject_synthetic_data(
     valid_sources = ["catalunya", "valencia", "galicia"]
     if source not in valid_sources:
         raise HTTPException(
-            status_code=400,
-            detail=f"Invalid source: {source}. Must be one of: {valid_sources}"
+            status_code=400, detail=f"Invalid source: {source}. Must be one of: {valid_sources}"
         )
 
     from typing import Literal
+
     source_literal: Literal["catalunya", "valencia", "galicia"] = source  # type: ignore[assignment]
 
     if not hasattr(request.app.state, "rabbitmq"):
@@ -92,8 +83,8 @@ async def inject_synthetic_data(
         payload_dict = SyntheticDataGenerator.generate_stations(
             source=source_literal,
             count=count,
-            error_rate=error_rate,
-            include_errors=include_errors or [],
+            error_rate=0.0,
+            include_errors=[],
         )
 
         # Generar message_id único para este lote
@@ -106,11 +97,14 @@ async def inject_synthetic_data(
             source_system=source_literal,
             status="processing",
         )
-        log_entry.set_injection_type("synthetic", {
-            "generated_count": count,
-            "error_rate": error_rate,
-            "error_types": include_errors or [],
-        })
+        log_entry.set_injection_type(
+            "synthetic",
+            {
+                "generated_count": count,
+                "error_rate": 0.0,
+                "error_types": [],
+            },
+        )
         session.add(log_entry)
         raw_message = RawIngestionMessage(
             message_id=message_id,
@@ -133,7 +127,6 @@ async def inject_synthetic_data(
             "message_id": message_id,
             "source": source,
             "count": count,
-            "error_rate": error_rate,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -181,11 +174,11 @@ async def upload_file(
     valid_sources = ["catalunya", "valencia", "galicia"]
     if source not in valid_sources:
         raise HTTPException(
-            status_code=400,
-            detail=f"Invalid source: {source}. Must be one of: {valid_sources}"
+            status_code=400, detail=f"Invalid source: {source}. Must be one of: {valid_sources}"
         )
 
     from typing import Literal as LiteralType
+
     source_literal: LiteralType["catalunya", "valencia", "galicia"] = source  # type: ignore[assignment]
 
     if not hasattr(request.app.state, "rabbitmq"):
@@ -221,7 +214,7 @@ async def upload_file(
         raise HTTPException(
             status_code=415,
             detail=f"Unsupported file type: {file.content_type}. "
-            f"Supported: {list(valid_mimes.keys())}"
+            f"Supported: {list(valid_mimes.keys())}",
         )
 
     try:
@@ -232,7 +225,7 @@ async def upload_file(
         if file_size > MAX_FILE_SIZE:
             raise HTTPException(
                 status_code=413,
-                detail=f"File too large: {file_size} bytes. Max: {MAX_FILE_SIZE} bytes"
+                detail=f"File too large: {file_size} bytes. Max: {MAX_FILE_SIZE} bytes",
             )
 
         payload_str = contents.decode("utf-8")
@@ -242,25 +235,18 @@ async def upload_file(
             try:
                 payload = json.loads(payload_str)
             except json.JSONDecodeError as e:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid JSON: {str(e)}"
-                )
+                raise HTTPException(status_code=400, detail=f"Invalid JSON: {str(e)}")
         elif detected_format == "xml":
             # Validación básica XML (no parsear completamente)
             if not payload_str.strip().startswith("<"):
-                raise HTTPException(
-                    status_code=400,
-                    detail="Invalid XML: must start with <"
-                )
+                raise HTTPException(status_code=400, detail="Invalid XML: must start with <")
             payload = payload_str
         else:  # CSV
             # Validación básica CSV
             lines = payload_str.strip().split("\n")
             if len(lines) < 2:
                 raise HTTPException(
-                    status_code=400,
-                    detail="Invalid CSV: must have header and at least one row"
+                    status_code=400, detail="Invalid CSV: must have header and at least one row"
                 )
             payload = payload_str
 
@@ -274,11 +260,14 @@ async def upload_file(
             source_system=source_literal,
             status="processing",
         )
-        log_entry.set_injection_type("file", {
-            "filename": file.filename,
-            "size_bytes": file_size,
-            "format": detected_format,
-        })
+        log_entry.set_injection_type(
+            "file",
+            {
+                "filename": file.filename,
+                "size_bytes": file_size,
+                "format": detected_format,
+            },
+        )
         session.add(log_entry)
         raw_message = RawIngestionMessage(
             message_id=message_id,
@@ -309,9 +298,6 @@ async def upload_file(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error processing file: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
     finally:
         await file.close()

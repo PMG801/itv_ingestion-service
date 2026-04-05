@@ -12,10 +12,13 @@ from core.config import Settings
 
 def test_settings_loads_from_environment() -> None:
     """Test that Settings loads values from environment variables."""
-    with patch.dict(os.environ, {
-        "APP_NAME": "TestApp",
-        "LOG_LEVEL": "DEBUG",
-    }):
+    with patch.dict(
+        os.environ,
+        {
+            "APP_NAME": "TestApp",
+            "LOG_LEVEL": "DEBUG",
+        },
+    ):
         settings = Settings()
         assert settings.APP_NAME == "TestApp"
         assert settings.LOG_LEVEL == "DEBUG"
@@ -24,10 +27,10 @@ def test_settings_loads_from_environment() -> None:
 def test_settings_has_required_fields() -> None:
     """Test that Settings has all required fields."""
     settings = Settings()
-    
+
     # Basic fields
     assert hasattr(settings, "APP_NAME")
-    assert hasattr(settings, "LOG_LEVEL")    
+    assert hasattr(settings, "LOG_LEVEL")
     assert hasattr(settings, "POSTGRES_HOST")
     assert hasattr(settings, "RABBITMQ_HOST")
     assert hasattr(settings, "RABBITMQ_PORT")
@@ -68,12 +71,15 @@ def test_settings_rabbitmq_host_and_port() -> None:
     assert settings.RABBITMQ_PORT > 0
 
 
-@pytest.mark.parametrize("env_var,value", [
-    ("LOG_LEVEL", "DEBUG"),
-    ("LOG_LEVEL", "INFO"),
-    ("LOG_LEVEL", "WARNING"),
-    ("LOG_LEVEL", "ERROR"),
-])
+@pytest.mark.parametrize(
+    "env_var,value",
+    [
+        ("LOG_LEVEL", "DEBUG"),
+        ("LOG_LEVEL", "INFO"),
+        ("LOG_LEVEL", "WARNING"),
+        ("LOG_LEVEL", "ERROR"),
+    ],
+)
 def test_settings_log_levels(env_var: str, value: str) -> None:
     """Test that various log levels are accepted."""
     with patch.dict(os.environ, {env_var: value}):

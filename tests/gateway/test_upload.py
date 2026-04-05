@@ -15,19 +15,16 @@ async def test_inject_synthetic_data_validates_source() -> None:
     """Test that inject_synthetic_data validates source parameter."""
     mock_request = MagicMock()
     mock_request.app.state.rabbitmq = MagicMock()
-    mock_session = AsyncMock()
-    
+    mock_session = MagicMock()
+    mock_session.commit = AsyncMock()
+    mock_session.rollback = AsyncMock()
+
     # Invalid source should raise HTTPException
     with pytest.raises(HTTPException) as exc_info:
         await inject_synthetic_data(
-            request=mock_request,
-            source="invalid",
-            count=10,
-            error_rate=0.0,
-            include_errors=None,
-            session=mock_session
+            request=mock_request, source="invalid", count=10, session=mock_session
         )
-    
+
     assert exc_info.value.status_code == 400
 
 
@@ -38,21 +35,18 @@ async def test_inject_synthetic_data_valid_sources() -> None:
     mock_request.app.state.rabbitmq = MagicMock()
     mock_request.app.state.rabbitmq.is_connected = True
     mock_request.app.state.rabbitmq.publish = AsyncMock()
-    
-    mock_session = AsyncMock()
-    
+
+    mock_session = MagicMock()
+    mock_session.commit = AsyncMock()
+    mock_session.rollback = AsyncMock()
+
     # Test that function processes valid sources without error
     # (may still hit other validations)
     for source in ["catalunya", "valencia", "galicia"]:
         try:
             # This may fail for other reasons, but not for invalid source
             await inject_synthetic_data(
-                request=mock_request,
-                source=source,
-                count=1,
-                error_rate=0.0,
-                include_errors=None,
-                session=mock_session
+                request=mock_request, source=source, count=1, session=mock_session
             )
         except HTTPException as e:
             # Should not be "Invalid source" error
@@ -65,18 +59,15 @@ async def test_inject_synthetic_data_requires_rabbitmq() -> None:
     mock_request = MagicMock()
     # Don't set rabbitmq in app state
     del mock_request.app.state.rabbitmq
-    mock_session = AsyncMock()
-    
+    mock_session = MagicMock()
+    mock_session.commit = AsyncMock()
+    mock_session.rollback = AsyncMock()
+
     with pytest.raises(HTTPException) as exc_info:
         await inject_synthetic_data(
-            request=mock_request,
-            source="catalunya",
-            count=10,
-            error_rate=0.0,
-            include_errors=None,
-            session=mock_session
+            request=mock_request, source="catalunya", count=10, session=mock_session
         )
-    
+
     assert exc_info.value.status_code == 503
 
 
@@ -86,20 +77,8 @@ async def test_inject_synthetic_data_validates_count() -> None:
     mock_request = MagicMock()
     mock_request.app.state.rabbitmq = MagicMock()
     mock_session = AsyncMock()
-    
+
     # Count is validated by FastAPI Query parameter
     # Values outside range should be rejected by FastAPI itself
     # This test just documents the behavior
-    assert True
-
-
-@pytest.mark.asyncio
-async def test_inject_synthetic_data_validates_error_rate() -> None:
-    """Test that inject_synthetic_data validates error_rate parameter."""
-    mock_request = MagicMock()
-    mock_request.app.state.rabbitmq = MagicMock()
-    mock_session = AsyncMock()
-    
-    # error_rate is validated by FastAPI Query parameter (0.0-1.0)
-    # This test documents the expected behavior
     assert True

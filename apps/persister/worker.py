@@ -9,6 +9,7 @@ Este worker es el último paso del pipeline:
 4. Registra en ingestion_log el resultado del procesamiento
    - Incluye timing information para benchmarking
 """
+
 import asyncio
 import json
 import logging
@@ -32,11 +33,11 @@ logger = logging.getLogger(__name__)
 class PersisterWorker:
     """
     Worker que persiste datos normalizados en PostgreSQL.
-    
+
     Implementa patrón UPSERT para evitar duplicados basándose en
     el constraint único (fuente_origen, id_en_fuente).
     """
-    
+
     def __init__(self) -> None:
         self.rabbitmq_url = settings.RABBITMQ_URL
         self.queue_name = "normalized_data.itv_stations"
@@ -52,18 +53,17 @@ class PersisterWorker:
         if self.channel is None:
             raise RuntimeError("RabbitMQ channel is not initialized")
         return self.channel
-    
+
     async def connect_rabbitmq(self) -> None:
         """Establece conexión con RabbitMQ."""
         logger.info(f"Conectando a RabbitMQ: {self.rabbitmq_url}")
         self.connection = await connect_robust(
-            self.rabbitmq_url,
-            client_properties={"connection_name": "persister-worker"}
+            self.rabbitmq_url, client_properties={"connection_name": "persister-worker"}
         )
         self.channel = await self.connection.channel()
         await self.channel.set_qos(prefetch_count=10)  # Procesar max 10 mensajes concurrentes
         logger.info("✓ Conectado a RabbitMQ")
-    
+
     async def process_message(self, message: AbstractIncomingMessage) -> None:
         """
         Procesa un mensaje de la cola: deserializa, mapea y persiste.
@@ -138,7 +138,7 @@ class PersisterWorker:
                                 "codigo_postal": stmt.excluded.codigo_postal,
                                 "datos_extra": stmt.excluded.datos_extra,
                                 # fecha_actualizacion se actualiza automáticamente por trigger
-                            }
+                            },
                         )
 
                         # Ejecutar UPSERT
@@ -162,9 +162,15 @@ class PersisterWorker:
                         metadata: dict[str, Any] = {
                             "timing": {
                                 # Tiempos del Normalizer (si disponibles)
-                                "gateway_ingested_at": timing_context.get("message_id"),  # Placeholder para gateway
-                                "normalizer_started_at": timing_context.get("normalizer_started_at"),
-                                "normalizer_completed_at": timing_context.get("normalizer_completed_at"),
+                                "gateway_ingested_at": timing_context.get(
+                                    "message_id"
+                                ),  # Placeholder para gateway
+                                "normalizer_started_at": timing_context.get(
+                                    "normalizer_started_at"
+                                ),
+                                "normalizer_completed_at": timing_context.get(
+                                    "normalizer_completed_at"
+                                ),
                                 # Tiempos del Persister
                                 "persister_started_at": persister_started_at.isoformat(),
                                 "persister_completed_at": persister_completed_at.isoformat(),
@@ -182,7 +188,10 @@ class PersisterWorker:
                                 normalizer_completed_str.replace("Z", "+00:00")
                             )
                             normalizer_duration_ms = int(
-                                (normalizer_completed_timestamp - normalizer_started_timestamp).total_seconds() * 1000
+                                (
+                                    normalizer_completed_timestamp - normalizer_started_timestamp
+                                ).total_seconds()
+                                * 1000
                             )
                             metadata["timing"]["normalizer_duration_ms"] = normalizer_duration_ms
                         except (ValueError, TypeError):
@@ -227,21 +236,30 @@ class PersisterWorker:
                             # Agregate timing metadata al error también
                             metadata = {
                                 "timing": {
-                                    "normalizer_started_at": timing_context.get("normalizer_started_at"),
-                                    "normalizer_completed_at": timing_context.get("normalizer_completed_at"),
+                                    "normalizer_started_at": timing_context.get(
+                                        "normalizer_started_at"
+                                    ),
+                                    "normalizer_completed_at": timing_context.get(
+                                        "normalizer_completed_at"
+                                    ),
                                     "persister_started_at": persister_started_at.isoformat(),
                                     "persister_completed_at": persister_completed_at.isoformat(),
                                     "persister_duration_ms": int(
-                                        (persister_completed_at - persister_started_at).total_seconds() * 1000
+                                        (
+                                            persister_completed_at - persister_started_at
+                                        ).total_seconds()
+                                        * 1000
                                     ),
                                 },
-                                "error_in_step": "persistence"
+                                "error_in_step": "persistence",
                             }
                             log_entry.metadata_json = metadata
                             session.add(log_entry)
                             await session.commit()
                         except Exception as log_error:
-                            logger.error(f"No se pudo registrar error en ingestion_log: {log_error}")
+                            logger.error(
+                                f"No se pudo registrar error en ingestion_log: {log_error}"
+                            )
 
                         # NACK para reintentar (irá a DLQ si supera max_retries)
                         await message.nack(requeue=False)
@@ -253,11 +271,11 @@ class PersisterWorker:
             except Exception as e:
                 logger.exception(f"Error inesperado procesando mensaje {message_id}: {e}")
                 await message.nack(requeue=False)
-    
+
     async def start_consuming(self) -> None:
         """Inicia el consumo de mensajes de RabbitMQ."""
         await self.connect_rabbitmq()
-        
+
         # Declarar la cola — los argumentos deben coincidir EXACTAMENTE con los
         # usados al crearla (definitions.json), si no RabbitMQ lanza PRECONDITION_FAILED.
         channel = self._require_channel()
@@ -267,41 +285,41 @@ class PersisterWorker:
             arguments={
                 "x-dead-letter-exchange": "dlx",
                 "x-dead-letter-routing-key": "dlx.normalized_data.itv_stations",
-            }
+            },
         )
-        
+
         logger.info(f"Esperando mensajes en cola '{self.queue_name}'...")
         self._running = True
-        
+
         # Consumir mensajes
         await queue.consume(self.process_message)
-    
+
     async def stop(self) -> None:
         """Detiene el worker gracefully."""
         logger.info("Deteniendo Persister Worker...")
         self._running = False
-        
+
         if self.channel:
             await self.channel.close()
         if self.connection:
             await self.connection.close()
-        
+
         logger.info("✓ Persister Worker detenido")
 
 
 async def main():
     """Main worker loop."""
     logger.info("Persister worker starting...")
-    
+
     worker = PersisterWorker()
-    
+
     try:
         await worker.start_consuming()
-        
+
         # Mantener el worker corriendo hasta Ctrl+C
         while worker.is_running:
             await asyncio.sleep(1)
-    
+
     except KeyboardInterrupt:
         logger.info("Señal de interrupción recibida (Ctrl+C)")
     except Exception as e:
@@ -312,10 +330,8 @@ async def main():
 
 if __name__ == "__main__":
     logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
-    
+
     # Ejecutar worker async
     asyncio.run(main())
-

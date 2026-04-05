@@ -4,6 +4,7 @@ Alembic Environment Configuration for Async SQLAlchemy.
 Este módulo configura Alembic para trabajar con SQLAlchemy async + asyncpg.
 Carga los modelos ORM y configura la metadata para autogeneración de migraciones.
 """
+
 import asyncio
 import sys
 from logging.config import fileConfig
@@ -45,10 +46,10 @@ target_metadata = Base.metadata
 def run_migrations_offline() -> None:
     """
     Run migrations in 'offline' mode.
-    
+
     Genera scripts SQL sin conectarse a la base de datos.
     Útil para generar SQL para revisión o aplicación manual.
-    
+
     Uso: alembic upgrade head --sql > migration.sql
     """
     url = config.get_main_option("sqlalchemy.url")
@@ -69,7 +70,7 @@ def run_migrations_offline() -> None:
 def do_run_migrations(connection: Connection) -> None:
     """
     Ejecuta las migraciones con la conexión proporcionada.
-    
+
     Args:
         connection: Conexión SQLAlchemy (síncrona, wrapeada desde async)
     """
@@ -88,7 +89,7 @@ def do_run_migrations(connection: Connection) -> None:
 async def run_async_migrations() -> None:
     """
     Run migrations in 'online' mode con async engine.
-    
+
     Crea un engine async, obtiene una conexión y ejecuta las migraciones
     de forma sincronizada dentro del contexto async.
     """
@@ -110,7 +111,7 @@ async def run_async_migrations() -> None:
 def run_migrations_online() -> None:
     """
     Run migrations in 'online' mode.
-    
+
     Wrapper que ejecuta las migraciones async usando asyncio.run().
     Este es el modo por defecto cuando ejecutas comandos Alembic.
     """

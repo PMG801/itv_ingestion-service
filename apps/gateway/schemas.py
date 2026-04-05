@@ -17,11 +17,11 @@ PayloadDict = dict[str, object]
 class RawIngestionMessage(BaseModel):
     """
     Raw ingestion message format for data entering the system.
-    
+
     This model represents the envelope for raw data from external sources
     before any processing or normalization. It captures the original payload
     along with metadata for traceability.
-    
+
     Attributes:
         message_id: Unique identifier for message tracing (auto-generated UUID).
         source: Data source identifier (catalunya, valencia, galicia).
@@ -88,7 +88,7 @@ class RawIngestionMessage(BaseModel):
 class IngestRequest(BaseModel):
     """
     Request body for ingestion endpoint.
-    
+
     Attributes:
         payload: Raw data from external source (any valid JSON).
         format: Data format (defaults to json, can be xml or csv).
@@ -122,7 +122,7 @@ class IngestRequest(BaseModel):
 class IngestResponse(BaseModel):
     """
     Response model for successful ingestion.
-    
+
     Attributes:
         message_id: Unique identifier for tracking the ingested message.
         status: Processing status (always 'accepted' for 202 responses).
@@ -161,7 +161,7 @@ class IngestResponse(BaseModel):
 class ErrorResponse(BaseModel):
     """
     Error response model for failed requests.
-    
+
     Attributes:
         error: Error type or category.
         detail: Detailed error message.

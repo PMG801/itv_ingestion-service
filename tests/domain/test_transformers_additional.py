@@ -41,12 +41,12 @@ def test_record_rejection_none_fragment() -> None:
 def test_reset_rejections_clears_list() -> None:
     """Test that reset_rejections clears the rejected items list."""
     transformer = CatalunyaTransformer()
-    
+
     # Add some rejections
     for i in range(5):
         transformer.record_rejection(f"reason_{i}", f"fragment_{i}")
     assert len(transformer.rejected_items) == 5
-    
+
     # Reset
     transformer.reset_rejections()
     assert len(transformer.rejected_items) == 0
@@ -55,10 +55,10 @@ def test_reset_rejections_clears_list() -> None:
 def test_multiple_rejections_accumulate() -> None:
     """Test that multiple rejections accumulate."""
     transformer = ValenciaTransformer()
-    
+
     for i in range(10):
         transformer.record_rejection(f"reason_{i}", f"data_{i}")
-    
+
     assert len(transformer.rejected_items) == 10
 
 
@@ -67,7 +67,7 @@ def test_all_transformers_have_correct_source_system() -> None:
     cat = CatalunyaTransformer()
     gal = GaliciaTransformer()
     val = ValenciaTransformer()
-    
+
     assert cat.source_system == "catalunya"
     assert gal.source_system == "galicia"
     assert val.source_system == "valencia"
@@ -78,7 +78,7 @@ def test_transformer_isinstance_base_transformer() -> None:
     cat = CatalunyaTransformer()
     gal = GaliciaTransformer()
     val = ValenciaTransformer()
-    
+
     assert isinstance(cat, BaseTransformer)
     assert isinstance(gal, BaseTransformer)
     assert isinstance(val, BaseTransformer)
@@ -101,7 +101,7 @@ def test_transformer_rejection_with_empty_string_reason() -> None:
 def test_transformer_multiple_resets() -> None:
     """Test multiple resets don't cause errors."""
     transformer = GaliciaTransformer()
-    
+
     for _ in range(3):
         transformer.record_rejection("reason", "data")
         transformer.reset_rejections()
@@ -112,7 +112,7 @@ def test_rejected_items_structure() -> None:
     """Test that rejected_items has correct structure."""
     transformer = CatalunyaTransformer()
     transformer.record_rejection("test_reason", {"key": "value"})
-    
+
     assert len(transformer.rejected_items) == 1
     item = transformer.rejected_items[0]
     assert "reason" in item

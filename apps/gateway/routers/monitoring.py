@@ -1,28 +1,25 @@
 """
-Monitoring Router para exponer métricas y estado del sistema.
+Monitoring Router para exponer estado y métricas del sistema.
 
 Proporciona endpoints para que el Frontend consulte:
 1. Estado de una ingesta específica (GET /api/v1/monitoring/ingest/{message_id})
 2. Métricas agregadas del sistema (GET /api/v1/monitoring/metrics)
-
-Estos endpoints permiten implementar un panel de benchmarking en tiempo real.
 """
 
 from typing import Any
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 
 from core.database import get_async_session
 from core.database.queries import get_ingest_status, get_metrics_aggregation
-from datetime import datetime, timezone
 
 router = APIRouter(prefix="/api/v1/monitoring", tags=["monitoring"])
 
 
 @router.get("/ingest/{message_id}")
 async def get_ingest_status_endpoint(
-    message_id: str,
-    session: AsyncSession = Depends(get_async_session)
+    message_id: str, session: AsyncSession = Depends(get_async_session)
 ) -> dict[str, Any]:
     """
     Obtiene el estado completo de una ingesta específica.
@@ -66,18 +63,14 @@ async def get_ingest_status_endpoint(
     status = await get_ingest_status(session, message_id)
 
     if not status:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Message ID '{message_id}' not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Message ID '{message_id}' not found")
 
     return status
 
 
 @router.get("/metrics")
 async def get_metrics_endpoint(
-    period_hours: int = Query(24, ge=1, le=8760),
-    session: AsyncSession = Depends(get_async_session)
+    period_hours: int = Query(24, ge=1, le=8760), session: AsyncSession = Depends(get_async_session)
 ) -> dict[str, Any]:
     """
     Obtiene métricas agregadas del sistema en un período.
@@ -86,7 +79,6 @@ async def get_metrics_endpoint(
         period_hours: Horas atrás a analizar (1-8760, default 24)
 
     Returns: {
-        "success_rate_percent": 96.5,
         "total_messages": 1250,
         "successful": 1200,
         "failed": 50,
@@ -94,17 +86,11 @@ async def get_metrics_endpoint(
         "avg_latency_ms": 1585.42,
         "p95_latency_ms": 2100.0,
         "p99_latency_ms": 2800.0,
-        "error_rate_by_source": {
-            "catalunya": 2.5,
-            "valencia": 4.2,
-            "galicia": 3.1
-        },
         "per_source_stats": {
             "catalunya": {
                 "total": 500,
                 "successful": 490,
-                "failed": 10,
-                "rate": 98.0
+                "failed": 10
             },
             ...
         },
@@ -127,45 +113,30 @@ async def get_metrics_endpoint(
     return metrics
 
 
-@router.get("/health-detailed")
-async def get_health_detailed_endpoint(
-    session: AsyncSession = Depends(get_async_session)
-):
+@router.delete("/truncate")
+async def truncate_storage_endpoint(
+    session: AsyncSession = Depends(get_async_session),
+) -> dict[str, Any]:
     """
-    Obtiene información detallada de salud del sistema (debugging).
+    Trunca rápidamente las tablas principales del almacén de ingesta.
 
-    Útil para diagnósticos y monitoreo interno.
+    Tablas afectadas:
+    - itv.estaciones
+    - itv.ingestion_log
 
-    Returns: {
-        "timestamp": "2026-03-20T12:00:00+00:00",
-        "status": "healthy|degraded|unhealthy",
-        "ingestion_pipeline": {
-            "recent_messages_24h": 250,
-            "success_rate_24h": 96.5,
-            "avg_latency_ms": 1585.42
-        },
-        "database": {
-            "status": "connected|disconnected"
-        },
-        "rabbitmq": {
-            "status": "connected|disconnected"
-            # queue_depths si está disponible
+    HTTP Status:
+        200: Truncate completado
+        500: Error durante la operación
+    """
+    try:
+        await session.execute(text("TRUNCATE TABLE itv.estaciones CASCADE"))
+        await session.execute(text("TRUNCATE TABLE itv.ingestion_log CASCADE"))
+        await session.commit()
+
+        return {
+            "status": "success",
+            "message": "Almacén truncado correctamente",
         }
-    }
-    """
-    metrics = await get_metrics_aggregation(session, 24)
-
-    return {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "status": "healthy" if metrics["success_rate_percent"] >= 90 else "degraded" if metrics["success_rate_percent"] >= 70 else "unhealthy",
-        "ingestion_pipeline": {
-            "recent_messages_24h": metrics.get("total_messages", 0),
-            "success_rate_24h": metrics.get("success_rate_percent", 0),
-            "avg_latency_ms": metrics.get("avg_latency_ms", 0),
-            "p95_latency_ms": metrics.get("p95_latency_ms", 0),
-        },
-        "database": {
-            "status": "connected"  # Si llegó aquí, BD está operativa
-        },
-        "metrics": metrics,
-    }
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Error truncating storage: {str(e)}")

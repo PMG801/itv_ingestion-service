@@ -109,7 +109,19 @@ pdm run type-check
 
 ### Gateway (Puerto 8000)
 - `GET /health` - Health check
-- `POST /ingest/itv` - Ingesta de datos ITV
+- `POST /api/v1/ingest/{source}` - Encola payload crudo para ingesta asíncrona
+- `POST /api/v1/inject/synthetic/{source}` - Inyección de datos sintéticos
+- `POST /api/v1/files/upload/{source}` - Carga de archivo (JSON/XML/CSV)
+- `GET /api/v1/monitoring/ingest/{message_id}` - Estado de ingesta por mensaje
+- `GET /api/v1/monitoring/metrics` - Métricas agregadas (sin métricas de rate)
+- `GET /api/v1/stations/all` - Consulta de estaciones persistidas
+
+### Breaking Changes (2026-04)
+- Eliminado `POST/GET/DELETE /api/carga/*` (router de compatibilidad legacy).
+- Eliminado `GET /api/v1/sources`.
+- Eliminados `GET /api/v1/stations/provinces` y `GET /api/provincias`.
+- Eliminado `GET /api/v1/monitoring/health-detailed`.
+- `POST /api/v1/inject/synthetic/{source}` ya no acepta `error_rate` ni `include_errors`.
 
 ## 🔧 Configuración Avanzada
 

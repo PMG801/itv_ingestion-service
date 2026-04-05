@@ -81,22 +81,28 @@ def test_render_text_report_includes_key_sections() -> None:
 
 
 def test_build_amqp_url_prefers_explicit_url() -> None:
-    assert _build_amqp_url(
-        rabbitmq_url="amqp://user:pass@host:5672/vhost",
-        host="ignored",
-        port=5672,
-        user="ignored",
-        password="ignored",
-        vhost="ignored",
-    ) == "amqp://user:pass@host:5672/vhost"
+    assert (
+        _build_amqp_url(
+            rabbitmq_url="amqp://user:pass@host:5672/vhost",
+            host="ignored",
+            port=5672,
+            user="ignored",
+            password="ignored",
+            vhost="ignored",
+        )
+        == "amqp://user:pass@host:5672/vhost"
+    )
 
 
 def test_build_amqp_url_uses_components_when_url_missing() -> None:
-    assert _build_amqp_url(
-        rabbitmq_url=None,
-        host="localhost",
-        port=5673,
-        user="admin",
-        password="secret",
-        vhost="/itv_data",
-    ) == "amqp://admin:secret@localhost:5673/itv_data"
+    assert (
+        _build_amqp_url(
+            rabbitmq_url=None,
+            host="localhost",
+            port=5673,
+            user="admin",
+            password="secret",
+            vhost="/itv_data",
+        )
+        == "amqp://admin:secret@localhost:5673/itv_data"
+    )

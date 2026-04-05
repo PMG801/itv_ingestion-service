@@ -152,7 +152,6 @@ services:
     build:
       context: .
       dockerfile: apps/persister/Dockerfile
-    container_name: itv_persister
     environment:
       APP_NAME: "ITV Persister Worker"
       LOG_LEVEL: ${LOG_LEVEL:-INFO}

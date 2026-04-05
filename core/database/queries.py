@@ -16,10 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from domain.itv_stations.models import IngestionLog
 
 
-async def get_ingest_status(
-    session: AsyncSession,
-    message_id: str
-) -> Optional[dict[str, Any]]:
+async def get_ingest_status(session: AsyncSession, message_id: str) -> Optional[dict[str, Any]]:
     """
     Obtiene el estado completo de una ingesta específica.
 
@@ -59,10 +56,7 @@ async def get_ingest_status(
     }
 
 
-async def get_metrics_aggregation(
-    session: AsyncSession,
-    period_hours: int = 24
-) -> dict[str, Any]:
+async def get_metrics_aggregation(session: AsyncSession, period_hours: int = 24) -> dict[str, Any]:
     """
     Calcula métricas agregadas del sistema en un período.
 
@@ -77,40 +71,36 @@ async def get_metrics_aggregation(
         period_hours: Horas atrás a considerar (default 24)
 
     Returns:
-        Dict con success_rate, latencias, rechazos, queue depths
+        Dict con volumen, latencias, rechazos y estadísticas por fuente
     """
     cutoff_time = datetime.now(timezone.utc) - timedelta(hours=period_hours)
 
     # Query base: filtrar por período
-    base_stmt = select(IngestionLog).where(
-        IngestionLog.processed_at >= cutoff_time
-    )
+    base_stmt = select(IngestionLog).where(IngestionLog.processed_at >= cutoff_time)
     result = await session.execute(base_stmt)
     logs = result.scalars().all()
 
     if not logs:
         return {
-            "success_rate_percent": 0.0,
             "total_messages": 0,
+            "successful": 0,
+            "failed": 0,
             "period_hours": period_hours,
             "avg_latency_ms": 0,
             "p95_latency_ms": 0,
             "p99_latency_ms": 0,
-            "error_rate_by_source": {},
             "per_source_stats": {},
             "queue_depths": {},
             "top_rejection_reasons": [],
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
     # Calcular estadísticas
     total = len(logs)
     successful = sum(1 for log in logs if log.status == "success")
     failed = sum(1 for log in logs if log.status == "failed")
-    success_rate = (successful / total * 100) if total > 0 else 0.0
-
     # Extraer latencias totales
     latencies = []
-    error_counts_by_source = {}
     rejection_reasons_all = {}
     sources_stats = {}
 
@@ -133,7 +123,6 @@ async def get_metrics_aggregation(
             sources_stats[source]["successful"] += 1
         else:
             sources_stats[source]["failed"] += 1
-            error_counts_by_source[source] = error_counts_by_source.get(source, 0) + 1
 
         # Extraer razones de rechazo
         rejection_summary = metadata.get("rejection_summary", {})
@@ -148,23 +137,12 @@ async def get_metrics_aggregation(
     p95_latency_ms = _percentile(latencies_sorted, 0.95)
     p99_latency_ms = _percentile(latencies_sorted, 0.99)
 
-    # Error rate por fuente
-    error_rate_by_source = {  # type: ignore[assignment]
-        source: (error_counts_by_source.get(source, 0) / sources_stats[source]["total"] * 100)  # type: ignore[index, arg-type]
-        if sources_stats[source]["total"] > 0
-        else 0
-        for source in sources_stats.keys()
-    }
-
-    # Per source stats con rate
+    # Per source stats
     per_source_stats = {  # type: ignore[assignment]
         source: {
             "total": stats["total"],
             "successful": stats["successful"],
             "failed": stats["failed"],
-            "rate": (stats["successful"] / stats["total"] * 100)
-            if stats["total"] > 0
-            else 0,
         }
         for source, stats in sources_stats.items()
     }
@@ -175,18 +153,21 @@ async def get_metrics_aggregation(
             {
                 "reason": reason,  # type: ignore[assignment]
                 "count": count,  # type: ignore[assignment]
-                "percentage": (count / sum(rejection_reasons_all.values()) * 100)  # type: ignore[operator]
-                if rejection_reasons_all
-                else 0,
+                "percentage": (
+                    (count / sum(rejection_reasons_all.values()) * 100)  # type: ignore[operator]
+                    if rejection_reasons_all
+                    else 0
+                ),
             }
             for reason, count in rejection_reasons_all.items()  # type: ignore[attr-defined]
         ],
         key=lambda x: x["count"],
         reverse=True,
-    )[:10]  # Top 10
+    )[
+        :10
+    ]  # Top 10
 
     return {  # type: ignore[return-value]
-        "success_rate_percent": round(success_rate, 2),
         "total_messages": total,
         "successful": successful,
         "failed": failed,
@@ -194,7 +175,6 @@ async def get_metrics_aggregation(
         "avg_latency_ms": round(avg_latency_ms, 2),
         "p95_latency_ms": round(p95_latency_ms, 2),
         "p99_latency_ms": round(p99_latency_ms, 2),
-        "error_rate_by_source": error_rate_by_source,
         "per_source_stats": per_source_stats,
         "queue_depths": {},  # Será completado por RabbitMQ API helper
         "top_rejection_reasons": top_rejection_reasons,
@@ -202,10 +182,7 @@ async def get_metrics_aggregation(
     }
 
 
-async def get_rejection_details(
-    session: AsyncSession,
-    message_id: str
-) -> Optional[dict[str, Any]]:
+async def get_rejection_details(session: AsyncSession, message_id: str) -> Optional[dict[str, Any]]:
     """
     Obtiene detalles de rechazos para un mensaje específico.
 
@@ -230,6 +207,7 @@ async def get_rejection_details(
 # ============================================================================
 # Funciones Auxiliares Privadas
 # ============================================================================
+
 
 def _calculate_timing_breakdown(timing: dict[str, str]) -> dict[str, int]:
     """

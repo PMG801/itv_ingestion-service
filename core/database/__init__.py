@@ -2,6 +2,7 @@
 Configuración de la base de datos usando SQLAlchemy 2.0 con soporte asíncrono.
 Usa asyncpg como driver para PostgreSQL.
 """
+
 from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import (
     create_async_engine,
@@ -11,10 +12,9 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase
 from core.config import settings
 
-
 # Crear el motor asíncrono
 async_engine = create_async_engine(
-    settings.SQLALCHEMY_DATABASE_URI, 
+    settings.SQLALCHEMY_DATABASE_URI,
     echo=settings.LOG_LEVEL == "DEBUG",
     pool_pre_ping=True,
     pool_size=5,
@@ -38,6 +38,7 @@ class Base(DeclarativeBase):
     Clase base para todos los modelos de SQLAlchemy.
     Hereda de DeclarativeBase (SQLAlchemy 2.0 style).
     """
+
     pass
 
 

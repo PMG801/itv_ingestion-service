@@ -10,7 +10,9 @@ from apps.normalizer.worker import NormalizerWorker
 from domain.itv_stations.schemas import NormalizedStation
 
 
-def _build_station(base_payload: dict[str, object], *, station_id: str, raw_id: str) -> NormalizedStation:
+def _build_station(
+    base_payload: dict[str, object], *, station_id: str, raw_id: str
+) -> NormalizedStation:
     payload = cast(dict[str, Any], deepcopy(base_payload))
     payload["station_id"] = station_id
     payload["raw_id"] = raw_id
@@ -22,8 +24,12 @@ async def test_process_message_transforms_and_publishes_every_station(
     normalized_station_payload: dict[str, object],
 ) -> None:
     worker = NormalizerWorker()
-    first_station = _build_station(normalized_station_payload, station_id="CAT_BCN-001", raw_id="BCN-001")
-    second_station = _build_station(normalized_station_payload, station_id="CAT_GIR-002", raw_id="GIR-002")
+    first_station = _build_station(
+        normalized_station_payload, station_id="CAT_BCN-001", raw_id="BCN-001"
+    )
+    second_station = _build_station(
+        normalized_station_payload, station_id="CAT_GIR-002", raw_id="GIR-002"
+    )
     transformer = Mock(transform=Mock(return_value=[first_station, second_station]))
 
     worker.factory = Mock(create=Mock(return_value=transformer))

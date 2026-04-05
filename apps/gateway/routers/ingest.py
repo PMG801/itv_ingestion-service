@@ -62,26 +62,26 @@ async def ingest_data(
 ) -> IngestResponse:
     """
     Ingest raw data from external source.
-    
+
     Receives data from external ITV APIs, validates the source, wraps it
     in a RawIngestionMessage envelope with traceability metadata, and
     publishes it to the raw_data exchange in RabbitMQ.
-    
+
     Args:
         source: Data source identifier (catalunya, valencia, galicia).
         request: FastAPI request object (for accessing app state).
         ingest_request: Request body containing payload and format.
-        
+
     Returns:
         IngestResponse: Confirmation with message_id for tracking.
-        
+
     Raises:
         HTTPException 400: If source is invalid or request is malformed.
         HTTPException 503: If RabbitMQ is unavailable.
     """
     # Normalize source to lowercase
     source_lower: Literal["catalunya", "valencia", "galicia"] = source
-    
+
     # Validate source
     if source_lower not in VALID_SOURCES:
         logger.warning(f"Invalid source attempted: {source}")
@@ -89,7 +89,7 @@ async def ingest_data(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid source '{source}'. Valid sources: {', '.join(VALID_SOURCES)}",
         )
-    
+
     # Check RabbitMQ connection
     if not hasattr(request.app.state, "rabbitmq"):
         logger.error("RabbitMQ client not initialized in app state")
@@ -97,16 +97,16 @@ async def ingest_data(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Messaging service unavailable",
         )
-    
+
     rabbitmq_client = request.app.state.rabbitmq
-    
+
     if not rabbitmq_client.is_connected:
         logger.error("RabbitMQ client not connected")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Messaging service unavailable - not connected",
         )
-    
+
     try:
         # Create RawIngestionMessage with auto-generated message_id and timestamp
         raw_message = RawIngestionMessage(
@@ -114,12 +114,12 @@ async def ingest_data(
             payload=ingest_request.payload,
             format=ingest_request.format,
         )
-        
+
         logger.info(
             f"Processing ingestion request: source={source_lower}, "
             f"format={ingest_request.format}, message_id={raw_message.message_id}"
         )
-        
+
         # Publish to RabbitMQ
         # Exchange: raw_data (topic)
         # Routing key: itv_stations (routes to raw_data.itv_stations queue)
@@ -128,19 +128,19 @@ async def ingest_data(
             exchange_name="raw_data",
             routing_key="itv_stations",
         )
-        
+
         logger.info(
             f"Successfully published message {raw_message.message_id} "
             f"from source {source_lower} to RabbitMQ"
         )
-        
+
         # Return 202 Accepted with message_id for tracking
         return IngestResponse(
             message_id=raw_message.message_id,
             status="accepted",
             message=f"Data from {source_lower} queued for processing",
         )
-        
+
     except Exception as e:
         logger.error(
             f"Failed to publish message from source {source_lower}: {e}",
@@ -150,22 +150,3 @@ async def ingest_data(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Failed to queue message: {str(e)}",
         )
-
-
-@router.get(
-    "/sources",
-    summary="List valid data sources",
-    description="Returns the list of valid data sources that can be ingested",
-    response_model=dict,
-)
-async def list_sources() -> dict[str, object]:
-    """
-    List valid ingestion sources.
-    
-    Returns:
-        dict: List of valid source identifiers.
-    """
-    return {
-        "sources": VALID_SOURCES,
-        "description": "Valid ITV data sources for ingestion",
-    }

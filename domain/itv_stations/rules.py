@@ -3,19 +3,58 @@
 import re
 from typing import Optional
 
-
 # Official Spanish provinces (50 total)
 SPANISH_PROVINCES = {
-    "ÁLAVA", "ALBACETE", "ALICANTE", "ALMERÍA", "ÁVILA",
-    "BADAJOZ", "BARCELONA", "BURGOS", "CÁCERES", "CÁDIZ",
-    "CANTABRIA", "CASTELLÓN", "CEUTA", "CIUDAD REAL", "CÓRDOBA",
-    "CUENCA", "GIRONA", "GRANADA", "GUADALAJARA", "GUIPÚZCOA",
-    "HUELVA", "HUESCA", "JAÉN", "LA CORUÑA", "LA RIOJA",
-    "LAS PALMAS", "LEÓN", "LLEIDA", "LUGO", "MADRID",
-    "MÁLAGA", "MELILLA", "MURCIA", "NAVARRA", "OURENSE",
-    "PALENCIA", "PALMA", "PONTEVEDRA", "SALAMANCA", "SEGOVIA",
-    "SEVILLA", "SORIA", "TARRAGONA", "TERUEL", "TOLEDO",
-    "VALENCIA", "VALLADOLID", "VIZCAYA", "ZAMORA", "ZARAGOZA",
+    "ÁLAVA",
+    "ALBACETE",
+    "ALICANTE",
+    "ALMERÍA",
+    "ÁVILA",
+    "BADAJOZ",
+    "BARCELONA",
+    "BURGOS",
+    "CÁCERES",
+    "CÁDIZ",
+    "CANTABRIA",
+    "CASTELLÓN",
+    "CEUTA",
+    "CIUDAD REAL",
+    "CÓRDOBA",
+    "CUENCA",
+    "GIRONA",
+    "GRANADA",
+    "GUADALAJARA",
+    "GUIPÚZCOA",
+    "HUELVA",
+    "HUESCA",
+    "JAÉN",
+    "LA CORUÑA",
+    "LA RIOJA",
+    "LAS PALMAS",
+    "LEÓN",
+    "LLEIDA",
+    "LUGO",
+    "MADRID",
+    "MÁLAGA",
+    "MELILLA",
+    "MURCIA",
+    "NAVARRA",
+    "OURENSE",
+    "PALENCIA",
+    "PALMA",
+    "PONTEVEDRA",
+    "SALAMANCA",
+    "SEGOVIA",
+    "SEVILLA",
+    "SORIA",
+    "TARRAGONA",
+    "TERUEL",
+    "TOLEDO",
+    "VALENCIA",
+    "VALLADOLID",
+    "VIZCAYA",
+    "ZAMORA",
+    "ZARAGOZA",
 }
 
 # Approximate geographic bounds by province (expanded margins to allow realistic variation)
@@ -26,36 +65,30 @@ PROVINCE_COORDS_RANGE = {
     "GIRONA": {"lat": (41.7, 42.5), "lon": (2.0, 3.4)},
     "LLEIDA": {"lat": (41.2, 43.1), "lon": (0.1, 2.0)},
     "TARRAGONA": {"lat": (40.7, 41.7), "lon": (0.4, 1.7)},
-    
     # Eastern (Valencia & Murcia)
     "VALENCIA": {"lat": (38.5, 41.0), "lon": (-1.7, 0.2)},
     "CASTELLÓN": {"lat": (39.6, 41.0), "lon": (-1.2, 0.7)},
     "ALICANTE": {"lat": (37.5, 39.2), "lon": (-1.9, -0.2)},
     "MURCIA": {"lat": (37.1, 38.7), "lon": (-2.5, -0.7)},
-    
     # Northeastern (Basque Country & Navarra)
     "VIZCAYA": {"lat": (42.6, 43.5), "lon": (-3.7, -2.5)},
     "GUIPÚZCOA": {"lat": (42.9, 43.5), "lon": (-2.8, -1.4)},
     "ÁLAVA": {"lat": (42.2, 43.3), "lon": (-3.8, -2.3)},
     "NAVARRA": {"lat": (42.0, 43.2), "lon": (-3.3, -1.0)},
-    
     # Northern (Rioja & Cantabria)
     "LA RIOJA": {"lat": (41.6, 42.8), "lon": (-3.4, -1.8)},
     "CANTABRIA": {"lat": (42.8, 43.6), "lon": (-4.0, -3.0)},
-    
     # Northwestern (Galicia)
     "A CORUÑA": {"lat": (42.0, 43.2), "lon": (-9.5, -7.6)},
     "LUGO": {"lat": (42.2, 43.4), "lon": (-9.0, -7.3)},
     "OURENSE": {"lat": (41.6, 42.8), "lon": (-8.9, -7.1)},
     "PONTEVEDRA": {"lat": (41.6, 42.8), "lon": (-9.1, -7.8)},
-    
     # Northern central (Asturias & León)
     "LEÓN": {"lat": (41.6, 43.4), "lon": (-6.9, -4.8)},
     "PALENCIA": {"lat": (41.4, 42.7), "lon": (-5.9, -3.9)},
     "VALLADOLID": {"lat": (40.8, 42.5), "lon": (-5.4, -3.5)},
     "BURGOS": {"lat": (40.6, 43.2), "lon": (-4.4, -2.3)},
     "SORIA": {"lat": (40.6, 42.5), "lon": (-4.1, -2.0)},
-    
     # Central Plateau (Castilla-La Mancha & Castilla y León)
     "MADRID": {"lat": (39.8, 41.4), "lon": (-4.5, -2.5)},
     "SEGOVIA": {"lat": (40.3, 41.7), "lon": (-4.8, -3.2)},
@@ -65,7 +98,6 @@ PROVINCE_COORDS_RANGE = {
     "GUADALAJARA": {"lat": (39.8, 41.5), "lon": (-4.6, -1.9)},
     "CIUDAD REAL": {"lat": (38.3, 40.0), "lon": (-5.3, -2.9)},
     "ALBACETE": {"lat": (38.1, 40.0), "lon": (-4.3, -0.8)},
-    
     # Southern (Andalucía)
     "BADAJOZ": {"lat": (37.6, 40.0), "lon": (-7.9, -4.7)},
     "CÓRDOBA": {"lat": (37.2, 39.0), "lon": (-5.5, -3.2)},
@@ -75,14 +107,11 @@ PROVINCE_COORDS_RANGE = {
     "MÁLAGA": {"lat": (36.2, 37.6), "lon": (-5.3, -3.2)},
     "GRANADA": {"lat": (36.5, 38.1), "lon": (-4.8, -2.3)},
     "ALMERÍA": {"lat": (36.2, 37.7), "lon": (-3.8, -1.5)},
-    
     # Autonomous cities in North Africa
     "CEUTA": {"lat": (35.8, 36.1), "lon": (-5.5, -5.2)},
     "MELILLA": {"lat": (35.2, 35.5), "lon": (-3.4, -3.1)},
-    
     # Balearic Islands
     "PALMA": {"lat": (39.2, 39.8), "lon": (2.4, 3.2)},
-    
     # Canary Islands
     "LAS PALMAS": {"lat": (27.5, 28.5), "lon": (-16.1, -15.0)},
 }
@@ -236,10 +265,7 @@ class ITVValidationRules:
         lat_min, lat_max = bounds["lat"]
         lon_min, lon_max = bounds["lon"]
 
-        return (
-            lat_min <= latitude <= lat_max
-            and lon_min <= longitude <= lon_max
-        )
+        return lat_min <= latitude <= lat_max and lon_min <= longitude <= lon_max
 
     @classmethod
     def validate_postal_code_by_province(
