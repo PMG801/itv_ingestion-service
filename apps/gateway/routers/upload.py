@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_async_session
 from apps.gateway.schemas import RawIngestionMessage
+from apps.gateway.fanout import split_payload_by_station
 from domain.synthetic_data_generator import SyntheticDataGenerator
 from domain.itv_stations.models import IngestionLog
 
@@ -106,18 +107,30 @@ async def inject_synthetic_data(
             },
         )
         session.add(log_entry)
-        raw_message = RawIngestionMessage(
-            message_id=message_id,
+        station_payloads = split_payload_by_station(
             source=source_literal,
+            data_format="json",
             payload=payload_dict,  # type: ignore[arg-type]
-            format="json",
         )
+        if not station_payloads:
+            raise HTTPException(status_code=400, detail="No station records generated")
 
-        await rabbitmq_client.publish(
-            message=raw_message.model_dump(mode="json"),
-            exchange_name="raw_data",
-            routing_key="itv_stations",
-        )
+        for idx, station_payload in enumerate(station_payloads, start=1):
+            station_message = RawIngestionMessage(
+                message_id=str(uuid4()),
+                parent_message_id=message_id,
+                station_sequence=idx,
+                total_stations=len(station_payloads),
+                source=source_literal,
+                payload=station_payload,
+                format="json",
+            )
+
+            await rabbitmq_client.publish(
+                message=station_message.model_dump(mode="json"),
+                exchange_name="raw_data",
+                routing_key="itv_stations",
+            )
 
         await session.commit()
 
@@ -127,6 +140,7 @@ async def inject_synthetic_data(
             "message_id": message_id,
             "source": source,
             "count": count,
+            "queued_messages": len(station_payloads),
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -269,18 +283,30 @@ async def upload_file(
             },
         )
         session.add(log_entry)
-        raw_message = RawIngestionMessage(
-            message_id=message_id,
+        station_payloads = split_payload_by_station(
             source=source_literal,
+            data_format=detected_format,  # type: ignore[arg-type]
             payload=payload,  # type: ignore[arg-type]
-            format=detected_format,  # type: ignore[arg-type]
         )
+        if not station_payloads:
+            raise HTTPException(status_code=400, detail="Uploaded payload has no station records")
 
-        await rabbitmq_client.publish(
-            message=raw_message.model_dump(mode="json"),
-            exchange_name="raw_data",
-            routing_key="itv_stations",
-        )
+        for idx, station_payload in enumerate(station_payloads, start=1):
+            station_message = RawIngestionMessage(
+                message_id=str(uuid4()),
+                parent_message_id=message_id,
+                station_sequence=idx,
+                total_stations=len(station_payloads),
+                source=source_literal,
+                payload=station_payload,
+                format=detected_format,  # type: ignore[arg-type]
+            )
+
+            await rabbitmq_client.publish(
+                message=station_message.model_dump(mode="json"),
+                exchange_name="raw_data",
+                routing_key="itv_stations",
+            )
 
         await session.commit()
 
@@ -292,6 +318,7 @@ async def upload_file(
             "size_bytes": file_size,
             "format": detected_format,
             "source": source,
+            "queued_messages": len(station_payloads),
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 

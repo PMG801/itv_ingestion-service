@@ -120,6 +120,10 @@ class NormalizerWorker:
         source = message.get("source", "unknown")
         payload = message.get("payload")
         data_format = message.get("format", "unknown")
+        gateway_ingested_at = message.get("ingested_at")
+        parent_message_id = message.get("parent_message_id")
+        station_sequence = message.get("station_sequence")
+        total_stations = message.get("total_stations")
 
         # TIMING: Capturar cuando inicia el normalizer
         normalizer_started_at = datetime.now(timezone.utc)
@@ -145,7 +149,8 @@ class NormalizerWorker:
 
             logger.debug(f"Using {transformer.__class__.__name__} for source={source}")
 
-            # Transform raw data to normalized format
+            # Transform raw data to normalized format.
+            # A raw message must represent exactly one station.
             normalized_stations = transformer.transform(payload)
 
             # Publish station-level rejected fragments captured by transformer
@@ -185,37 +190,46 @@ class NormalizerWorker:
                 self.messages_processed += 1
                 return
 
+            if len(normalized_stations) > 1:
+                raise ValueError(
+                    f"Invalid raw work unit for message {message_id}: expected 1 station, "
+                    f"got {len(normalized_stations)}"
+                )
+
             logger.info(f"✅ Transformed {len(normalized_stations)} stations from {source}")
 
             # TIMING: Capturar cuando finaliza la transformación
             normalizer_completed_at = datetime.now(timezone.utc)
 
-            # Publish each normalized station to the next queue
-            published_count = 0
-            for station in normalized_stations:
-                try:
-                    # Enriquecer el mensaje con timing information
-                    station_dict = station.model_dump(mode="json")
-                    station_dict["_timing_context"] = {
-                        "message_id": message_id,
-                        "normalizer_started_at": normalizer_started_at.isoformat(),
-                        "normalizer_completed_at": normalizer_completed_at.isoformat(),
-                    }
+            station = normalized_stations[0]
 
-                    await self.publisher.publish(
-                        message=station_dict,
-                        exchange_name="normalized_data",
-                        routing_key="itv_stations",
-                    )
-                    published_count += 1
-                except Exception as e:
-                    logger.error(f"Failed to publish station {station.station_id}: {e}")
-                    # Continue with other stations
-                    continue
+            # Enriquecer el mensaje con timing information
+            station_dict = station.model_dump(mode="json")
+            timing_context: dict[str, object] = {
+                "message_id": message_id,
+                "normalizer_started_at": normalizer_started_at.isoformat(),
+                "normalizer_completed_at": normalizer_completed_at.isoformat(),
+            }
+            if isinstance(gateway_ingested_at, str):
+                timing_context["gateway_ingested_at"] = gateway_ingested_at
+            if isinstance(parent_message_id, str):
+                timing_context["parent_message_id"] = parent_message_id
+            if isinstance(station_sequence, int):
+                timing_context["station_sequence"] = station_sequence
+            if isinstance(total_stations, int):
+                timing_context["total_stations"] = total_stations
+
+            station_dict["_timing_context"] = timing_context
+
+            await self.publisher.publish(
+                message=station_dict,
+                exchange_name="normalized_data",
+                routing_key="itv_stations",
+            )
 
             logger.info(
-                f"📤 Published {published_count}/{len(normalized_stations)} "
-                f"stations to normalized_data exchange"
+                f"📤 Published station {station.station_id} "
+                f"to normalized_data exchange"
             )
 
             self.messages_processed += 1

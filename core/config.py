@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     POSTGRES_PASSWORD: str = "itv_pass123"
     POSTGRES_DB: str = "itv_database"
 
+    # Persister batching settings
+    PERSISTER_BATCH_SIZE: int = 100
+    PERSISTER_BATCH_TIMEOUT_MS: int = 750
+    PERSISTER_RETRY_MAX_ATTEMPTS: int = 3
+    PERSISTER_RETRY_BASE_DELAY_MS: int = 200
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", case_sensitive=True, extra="ignore"
     )

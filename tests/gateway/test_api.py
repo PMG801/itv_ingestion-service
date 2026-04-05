@@ -55,12 +55,52 @@ async def test_ingest_endpoint_queues_message_and_returns_tracking_id(
     assert body["status"] == "accepted"
     assert body["message"].startswith("Data from catalunya queued")
     assert body["message_id"]
+    assert body["queued_messages"] == 1
 
     rabbitmq.publish.assert_awaited_once()
     publish_call = rabbitmq.publish.await_args
     assert publish_call.kwargs["exchange_name"] == "raw_data"
     assert publish_call.kwargs["routing_key"] == "itv_stations"
     assert publish_call.kwargs["message"]["source"] == "catalunya"
+    assert publish_call.kwargs["message"]["parent_message_id"] == body["message_id"]
+    assert publish_call.kwargs["message"]["station_sequence"] == 1
+    assert publish_call.kwargs["message"]["total_stations"] == 1
+
+
+@pytest.mark.asyncio
+async def test_ingest_endpoint_splits_payload_into_one_raw_message_per_station(
+    ingest_client: AsyncClient,
+) -> None:
+    rabbitmq = FakeRabbitMQ()
+    ingest_client.app.state.rabbitmq = rabbitmq
+
+    response = await ingest_client.post(
+        "/api/v1/ingest/valencia",
+        json={
+            "payload": {
+                "estaciones": [
+                    {"codigo": "VAL-001", "nombre": "A"},
+                    {"codigo": "VAL-002", "nombre": "B"},
+                ]
+            },
+            "format": "json",
+        },
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["queued_messages"] == 2
+
+    assert rabbitmq.publish.await_count == 2
+    first = rabbitmq.publish.await_args_list[0].kwargs["message"]
+    second = rabbitmq.publish.await_args_list[1].kwargs["message"]
+
+    assert first["parent_message_id"] == body["message_id"]
+    assert second["parent_message_id"] == body["message_id"]
+    assert first["station_sequence"] == 1
+    assert second["station_sequence"] == 2
+    assert first["total_stations"] == 2
+    assert second["total_stations"] == 2
 
 
 @pytest.mark.asyncio

@@ -52,6 +52,20 @@ class RawIngestionMessage(BaseModel):
         default_factory=lambda: datetime.now(timezone.utc),
         description="Ingestion timestamp (UTC)",
     )
+    parent_message_id: str | None = Field(
+        default=None,
+        description="Root/batch message identifier when fan-out is applied",
+    )
+    station_sequence: int | None = Field(
+        default=None,
+        description="1-based station index inside original payload batch",
+        ge=1,
+    )
+    total_stations: int | None = Field(
+        default=None,
+        description="Total station messages generated from the original payload",
+        ge=1,
+    )
 
     @field_validator("source")
     @classmethod
@@ -145,6 +159,11 @@ class IngestResponse(BaseModel):
     message: str = Field(
         default="Message queued for processing",
         description="Status message",
+    )
+    queued_messages: int = Field(
+        default=1,
+        description="Number of raw messages queued in RabbitMQ",
+        ge=1,
     )
 
     class Config:

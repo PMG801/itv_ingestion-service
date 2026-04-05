@@ -115,7 +115,6 @@ services:
     build:
       context: .
       dockerfile: apps/normalizer/Dockerfile
-    container_name: itv_normalizer
     environment:
       APP_NAME: "ITV Normalizer Worker"
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -166,6 +165,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-itv_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-itv_pass123}
       POSTGRES_DB: ${POSTGRES_DB:-itv_database}
+      PERSISTER_BATCH_SIZE: ${PERSISTER_BATCH_SIZE:-100}
+      PERSISTER_BATCH_TIMEOUT_MS: ${PERSISTER_BATCH_TIMEOUT_MS:-750}
+      PERSISTER_RETRY_MAX_ATTEMPTS: ${PERSISTER_RETRY_MAX_ATTEMPTS:-3}
+      PERSISTER_RETRY_BASE_DELAY_MS: ${PERSISTER_RETRY_BASE_DELAY_MS:-200}
       PYTHONUNBUFFERED: 1
       PYTHONPATH: /app
     volumes:

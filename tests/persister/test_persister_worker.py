@@ -48,6 +48,8 @@ async def test_persister_worker_acknowledges_successful_persistence(
     normalized_station: object,
 ) -> None:
     worker = PersisterWorker()
+    worker.batch_size = 1
+    worker.retry_max_attempts = 1
     session = FakeSession()
     monkeypatch.setattr("apps.persister.worker.AsyncSessionLocal", lambda: session)
 
@@ -70,6 +72,8 @@ async def test_persister_worker_nacks_on_database_error(
     normalized_station: object,
 ) -> None:
     worker = PersisterWorker()
+    worker.batch_size = 1
+    worker.retry_max_attempts = 1
     session = FakeSession()
     session.execute.side_effect = SQLAlchemyError("db down")
     monkeypatch.setattr("apps.persister.worker.AsyncSessionLocal", lambda: session)

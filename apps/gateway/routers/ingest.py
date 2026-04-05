@@ -7,6 +7,7 @@ asynchronous processing.
 """
 
 import logging
+from uuid import uuid4
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -17,6 +18,7 @@ from apps.gateway.schemas import (
     RawIngestionMessage,
     ErrorResponse,
 )
+from apps.gateway.fanout import split_payload_by_station
 
 logger = logging.getLogger(__name__)
 
@@ -108,37 +110,54 @@ async def ingest_data(
         )
 
     try:
-        # Create RawIngestionMessage with auto-generated message_id and timestamp
-        raw_message = RawIngestionMessage(
+        station_payloads = split_payload_by_station(
             source=source_lower,
+            data_format=ingest_request.format,
             payload=ingest_request.payload,
-            format=ingest_request.format,
         )
+
+        if not station_payloads:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Payload does not contain any station records",
+            )
+
+        batch_message_id = str(uuid4())
 
         logger.info(
             f"Processing ingestion request: source={source_lower}, "
-            f"format={ingest_request.format}, message_id={raw_message.message_id}"
+            f"format={ingest_request.format}, batch_message_id={batch_message_id}, "
+            f"stations={len(station_payloads)}"
         )
 
-        # Publish to RabbitMQ
-        # Exchange: raw_data (topic)
-        # Routing key: itv_stations (routes to raw_data.itv_stations queue)
-        await rabbitmq_client.publish(
-            message=raw_message.model_dump(mode="json"),
-            exchange_name="raw_data",
-            routing_key="itv_stations",
-        )
+        for idx, station_payload in enumerate(station_payloads, start=1):
+            station_message = RawIngestionMessage(
+                message_id=str(uuid4()),
+                parent_message_id=batch_message_id,
+                station_sequence=idx,
+                total_stations=len(station_payloads),
+                source=source_lower,
+                payload=station_payload,
+                format=ingest_request.format,
+            )
+
+            await rabbitmq_client.publish(
+                message=station_message.model_dump(mode="json"),
+                exchange_name="raw_data",
+                routing_key="itv_stations",
+            )
 
         logger.info(
-            f"Successfully published message {raw_message.message_id} "
-            f"from source {source_lower} to RabbitMQ"
+            f"Successfully published {len(station_payloads)} station messages "
+            f"for batch {batch_message_id} from source {source_lower}"
         )
 
         # Return 202 Accepted with message_id for tracking
         return IngestResponse(
-            message_id=raw_message.message_id,
+            message_id=batch_message_id,
             status="accepted",
             message=f"Data from {source_lower} queued for processing",
+            queued_messages=len(station_payloads),
         )
 
     except Exception as e:
