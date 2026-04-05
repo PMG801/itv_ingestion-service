@@ -46,7 +46,7 @@ class Settings(BaseSettings):
 
     # Persister batching settings
     PERSISTER_BATCH_SIZE: int = 100
-    PERSISTER_BATCH_TIMEOUT_MS: int = 750
+    PERSISTER_BATCH_TIMEOUT_MS: int = 50
     PERSISTER_RETRY_MAX_ATTEMPTS: int = 3
     PERSISTER_RETRY_BASE_DELAY_MS: int = 200
 

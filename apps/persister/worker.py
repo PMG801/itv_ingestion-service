@@ -13,6 +13,7 @@ Este worker es el último paso del pipeline:
 import asyncio
 import json
 import logging
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -146,7 +147,9 @@ class PersisterWorker:
 
     def _cancel_flush_timer_locked(self) -> None:
         if self._flush_timer_task and not self._flush_timer_task.done():
-            self._flush_timer_task.cancel()
+            current_task = asyncio.current_task()
+            if self._flush_timer_task is not current_task:
+                self._flush_timer_task.cancel()
         self._flush_timer_task = None
 
     async def _flush_after_timeout(self) -> None:
@@ -201,27 +204,34 @@ class PersisterWorker:
 
         rows: list[dict[str, Any]] = []
         for item in batch_items:
-            estacion_orm = normalized_station_to_orm(item.normalized_station)
-            rows.append(
-                {
-                    "fuente_origen": estacion_orm.fuente_origen,
-                    "id_en_fuente": estacion_orm.id_en_fuente,
-                    "nombre": estacion_orm.nombre,
-                    "latitud": estacion_orm.latitud,
-                    "longitud": estacion_orm.longitud,
-                    "location": estacion_orm.location,
-                    "telefono": estacion_orm.telefono,
-                    "email": estacion_orm.email,
-                    "direccion": estacion_orm.direccion,
-                    "codigo_postal": estacion_orm.codigo_postal,
-                    "datos_extra": estacion_orm.datos_extra,
-                    "fecha_creacion": estacion_orm.fecha_creacion,
-                    "fecha_actualizacion": estacion_orm.fecha_actualizacion,
-                }
-            )
+            try:
+                estacion_orm = normalized_station_to_orm(item.normalized_station)
+                rows.append(
+                    {
+                        "fuente_origen": estacion_orm.fuente_origen,
+                        "id_en_fuente": estacion_orm.id_en_fuente,
+                        "nombre": estacion_orm.nombre,
+                        "latitud": estacion_orm.latitud,
+                        "longitud": estacion_orm.longitud,
+                        "location": estacion_orm.location,
+                        "telefono": estacion_orm.telefono,
+                        "email": estacion_orm.email,
+                        "direccion": estacion_orm.direccion,
+                        "codigo_postal": estacion_orm.codigo_postal,
+                        "datos_extra": estacion_orm.datos_extra,
+                        "fecha_creacion": estacion_orm.fecha_creacion,
+                        "fecha_actualizacion": estacion_orm.fecha_actualizacion,
+                    }
+                )
+            except Exception as e:
+                logger.error(f"Error mapping station in batch {batch_id}: {e}", exc_info=True)
+                raise
+
+        logger.debug(f"Batch {batch_id}: Prepared {len(rows)} rows for insertion")
 
         async with AsyncSessionLocal() as session:
             try:
+                logger.debug(f"Batch {batch_id}: Starting INSERT/UPSERT operation...")
                 stmt = insert(EstacionITV).values(rows)
                 stmt = stmt.on_conflict_do_update(
                     constraint="uq_estaciones_fuente_id",
@@ -237,13 +247,21 @@ class PersisterWorker:
                         "datos_extra": stmt.excluded.datos_extra,
                     },
                 )
-                await session.execute(stmt)
+                
+                # Execute with timeout to prevent hanging
+                try:
+                    await asyncio.wait_for(session.execute(stmt), timeout=30.0)
+                    logger.debug(f"Batch {batch_id}: INSERT/UPSERT executed successfully")
+                except asyncio.TimeoutError:
+                    logger.error(f"Batch {batch_id}: TIMEOUT executing INSERT/UPSERT (30s limit exceeded)")
+                    raise TimeoutError("Database INSERT/UPSERT operation timed out after 30 seconds")
 
                 persister_completed_at = datetime.now(timezone.utc)
                 persister_duration_ms = int(
                     (persister_completed_at - persister_started_at).total_seconds() * 1000
                 )
 
+                logger.debug(f"Batch {batch_id}: Creating {len(batch_items)} ingestion log entries...")
                 for item in batch_items:
                     log_entry = IngestionLog(
                         message_id=item.tracing_message_id,
@@ -271,8 +289,30 @@ class PersisterWorker:
                     }
                     session.add(log_entry)
 
-                await session.commit()
-            except SQLAlchemyError:
+                logger.debug(f"Batch {batch_id}: Committing transaction...")
+                try:
+                    await asyncio.wait_for(session.commit(), timeout=30.0)
+                    logger.debug(f"Batch {batch_id}: Transaction committed successfully")
+                except asyncio.TimeoutError:
+                    logger.error(f"Batch {batch_id}: TIMEOUT committing transaction (30s limit exceeded)")
+                    raise TimeoutError("Database COMMIT operation timed out after 30 seconds")
+                    
+            except SQLAlchemyError as sa_error:
+                logger.error(
+                    f"Batch {batch_id}: SQLAlchemy error during persistence: {sa_error}",
+                    exc_info=True,
+                )
+                await session.rollback()
+                raise
+            except TimeoutError as timeout_error:
+                logger.error(f"Batch {batch_id}: Database timeout: {timeout_error}")
+                await session.rollback()
+                raise
+            except Exception as e:
+                logger.error(
+                    f"Batch {batch_id}: Unexpected error during persistence: {e}",
+                    exc_info=True,
+                )
                 await session.rollback()
                 raise
 
@@ -380,9 +420,14 @@ async def main():
 
 
 if __name__ == "__main__":
+    # Use DEBUG level to capture all diagnostic info
+    log_level = os.getenv("LOG_LEVEL", "DEBUG").upper()
     logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        level=getattr(logging, log_level, logging.INFO),
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
+    logger_main = logging.getLogger(__name__)
+    logger_main.info(f"Persister starting with LOG_LEVEL={log_level}")
 
     # Ejecutar worker async
     asyncio.run(main())
