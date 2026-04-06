@@ -1,0 +1,16 @@
+{
+  "stations": [
+    {
+      "id": "LU-001",
+      "nome": "  ITV Lugo Centro  ",
+      "enderezo": "Rúa da Industria 789",
+      "concello": "Lugo",
+      "provincia": "Lugo",
+      "cp": "27001",
+      "lat": 43.0097,
+      "lon": -7.5567,
+      "telefono": "982 123 456",
+      "correo": "info@itvlugo.gal"
+    }
+  ]
+}

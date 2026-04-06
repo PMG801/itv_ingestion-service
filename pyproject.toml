@@ -1,45 +1,175 @@
+[project]
+name = "itv-data-engine"
+version = "0.1.0"
+description = "Motor de Ingesta y Normalización Universal de Datos ITV"
+authors = [
+    {name = "TFG Team", email = "dev@itv-engine.local"}
+]
+requires-python = ">=3.11"
+readme = "README.md"
+license = {text = "MIT"}
+
+dependencies = [
+    # Web Framework
+    "fastapi==0.109.0",
+    "uvicorn[standard]==0.27.0",
+    "python-multipart==0.0.6",
+    
+    # Async Support
+    "aiohttp==3.9.1",
+    
+    # Message Broker
+    "aio-pika==9.3.1",
+    
+    # Database
+    "asyncpg==0.29.0",
+    "SQLAlchemy[asyncio]==2.0.25",
+    "GeoAlchemy2==0.14.3",
+    "alembic==1.13.1",
+    "shapely==2.0.2",
+    "numpy<2",
+    
+    # Data Validation
+    "pydantic==2.5.3",
+    "pydantic-settings==2.1.0",
+    
+    # Data Processing
+    "lxml==5.1.0",
+    "Faker>=24.0.0,<30.0.0",
+    
+    # Utilities
+    "python-dateutil==2.8.2",
+    
+    # Logging
+    "structlog==24.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==7.4.4",
+    "pytest-asyncio==0.23.3",
+    "pytest-cov>=4.1.0",
+    "httpx==0.26.0",
+    "black>=23.12.0",
+    "ruff>=0.1.9",
+    "mypy>=1.8.0",
+    "basedpyright>=1.38.2",
+]
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[tool.pdm]
+distribution = false
+
+[tool.pdm.dev-dependencies]
+dev = [
+    "pytest==7.4.4",
+    "pytest-asyncio==0.23.3",
+    "pytest-cov>=4.1.0",
+    "httpx==0.26.0",
+    "black>=23.12.0",
+    "ruff>=0.1.9",
+    "mypy>=1.8.0",
+]
+
+[tool.pdm.scripts]
+# Development
+dev-gateway = "uvicorn apps.gateway.main:app --reload --host 0.0.0.0 --port 8000"
+dev-normalizer = "python -m apps.normalizer.worker"
+dev-persister = "python -m apps.persister.worker"
+
+# Testing
+test = "pytest"
+test-cov = "pytest --cov=apps --cov=core --cov=domain --cov-report=html --cov-report=term"
+test-watch = "pytest-watch"
+
+# Code Quality
+format = "black ."
+lint = "ruff check ."
+type-check = "mypy apps core domain providers"
+
+[tool.black]
+line-length = 100
+target-version = ['py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by black)
+    "B008",  # do not perform function calls in argument defaults
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-
-# Opciones de output
-addopts = [
-    "-v",                          # Verbose
-    "--strict-markers",            # Markers estrictos
-    "--tb=short",                  # Traceback corto
-    "--disable-warnings",          # Desactivar warnings
-    "-ra",                         # Mostrar resumen de todos los tests
+minversion = "7.0"
+addopts = "-ra -q --strict-markers"
+testpaths = [
+    "tests",
 ]
-
-# Markers personalizados
-markers = [
-    "unit: Tests unitarios",
-    "integration: Tests de integración",
-    "api: Tests de API endpoints",
-    "slow: Tests lentos",
-    "db: Tests que requieren base de datos",
+pythonpath = [
+    "."
 ]
+asyncio_mode = "auto"
 
-# Coverage
-[tool.coverage.run]
-source = ["app", "extractor_services"]
-omit = [
-    "*/tests/*",
-    "*/test_*.py",
-    "*/__pycache__/*",
-    "*/venv/*",
-    "*/.venv/*",
-]
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_calls = true
+disallow_untyped_decorators = false
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+follow_imports = "normal"
+ignore_missing_imports = true
 
-[tool.coverage.report]
-exclude_lines = [
-    "pragma: no cover",
-    "def __repr__",
-    "raise AssertionError",
-    "raise NotImplementedError",
-    "if __name__ == .__main__.:",
-    "if TYPE_CHECKING:",
-    "@abstractmethod",
-]
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_untyped_calls = false
+
+[tool.basedpyright]
+typeCheckingMode = "strict"
+pythonVersion = "3.12"
+venvPath = "."
+venv = "venv"
+reportUnusedImport = true
+reportUnusedVariable = true
+reportMissingTypeStubs = false
+reportUnknownMemberType = false
+reportUnknownArgumentType = false
+exclude = ["**/node_modules", "**/__pycache__", ".venv", "venv"]

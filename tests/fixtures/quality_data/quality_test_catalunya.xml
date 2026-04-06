@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Quality Test Data - Catalunya (XML Format)
+This file contains VALID and INVALID records to test data quality:
+- VALID: Complete records with correct format and coordinates
+- INVALID: Missing fields, malformed coordinates, invalid emails, duplicate IDs
+- EDGE CASES: Valid but potentially problematic data
+-->
+<stations>
+  <!-- ===== VALID RECORDS ===== -->
+  <station>
+    <id>CAT_BCN_001</id>
+    <nom>ITV Barcelona Nord</nom>
+    <adreca>Carrer de la Indústria 123</adreca>
+    <ciutat>Barcelona</ciutat>
+    <provincia>Barcelona</provincia>
+    <codi_postal>08025</codi_postal>
+    <latitud>41.3851</latitud>
+    <longitud>2.1734</longitud>
+    <telefon>932123456</telefon>
+    <email>info@bcn-nord.cat</email>
+  </station>
+  
+  <station>
+    <id>CAT_GIRO_001</id>
+    <nom>ITV Girona Centre</nom>
+    <adreca>Carrer Mercaders 45</adreca>
+    <ciutat>Girona</ciutat>
+    <provincia>Girona</provincia>
+    <codi_postal>17001</codi_postal>
+    <latitud>41.9851</latitud>
+    <longitud>2.8235</longitud>
+    <telefon>972223344</telefon>
+    <email>contacte@girona.giro</email>
+  </station>
+
+  <station>
+    <id>CAT_TARRA_001</id>
+    <nom>ITV Tarragona Port</nom>
+    <adreca>Avinguda de l'Estació 78</adreca>
+    <ciutat>Tarragona</ciutat>
+    <provincia>Tarragona</provincia>
+    <codi_postal>43001</codi_postal>
+    <latitud>41.1189</latitud>
+    <longitud>1.2445</longitud>
+    <telefon>977334455</telefon>
+    <email>info@tarragona.tarra</email>
+  </station>
+
+  <!-- ===== EDGE CASES (VALID BUT RISKY) ===== -->
+  <station>
+    <id>CAT_LLE_001</id>
+    <nom>ITV Lleida Industrial</nom>
+    <adreca>Polígon Industrial Lleida Nord s/n</adreca>
+    <ciutat>Lleida</ciutat>
+    <provincia>Lleida</provincia>
+    <codi_postal>25001</codi_postal>
+    <latitud>41.6171</latitud>
+    <longitud>0.6272</longitud>
+    <telefon></telefon>
+    <!-- Missing phone but email present -->
+    <email>complex.email+support@lleida-itv.co.es</email>
+  </station>
+
+  <!-- ===== INVALID RECORDS (SHOULD BE REJECTED) ===== -->
+  
+  <!-- Missing required field: id -->
+  <station>
+    <nom>ITV Manresa</nom>
+    <adreca>Carrer Principal 10</adreca>
+    <ciutat>Manresa</ciutat>
+    <provincia>Barcelona</provincia>
+    <codi_postal>08240</codi_postal>
+    <latitud>41.7337</latitud>
+    <longitud>1.8344</longitud>
+    <telefon>938742222</telefon>
+    <email>info@manresa.cat</email>
+  </station>
+
+  <!-- Missing required field: name (nom) -->
+  <station>
+    <id>CAT_SABADELL_001</id>
+    <adreca>Avenida de la Generalitat 200</adreca>
+    <ciutat>Sabadell</ciutat>
+    <provincia>Barcelona</provincia>
+    <codi_postal>08203</codi_postal>
+    <latitud>41.5447</latitud>
+    <longitud>2.1124</longitud>
+    <telefon>937131414</telefon>
+    <email>info@sabadell.cat</email>
+  </station>
+
+  <!-- Invalid latitude (out of Spain bounds) -->
+  <station>
+    <id>CAT_INVALID_LAT</id>
+    <nom>ITV with Invalid Latitude</nom>
+    <adreca>Carrer Fals 1</adreca>
+    <ciutat>Barcelona</ciutat>
+    <provincia>Barcelona</provincia>
+    <codi_postal>08001</codi_postal>
+    <latitud>50.0000</latitud>
+    <longitud>2.1734</longitud>
+    <telefon>932111111</telefon>
+    <email>invalid@coords.cat</email>
+  </station>
+
+  <!-- Invalid longitude (out of Spain bounds) -->
+  <station>
+    <id>CAT_INVALID_LON</id>
+    <nom>ITV with Invalid Longitude</nom>
+    <adreca>Carrer Fals 2</adreca>
+    <ciutat>Barcelona</ciutat>
+    <provincia>Barcelona</provincia>
+    <codi_postal>08001</codi_postal>
+    <latitud>41.3851</latitud>
+    <longitud>15.0000</longitud>
+    <telefon>932222222</telefon>
+    <email>invalid@coords2.cat</email>
+  </station>
+
+  <!-- Invalid email format -->
+  <station>
+    <id>CAT_BAD_EMAIL_001</id>
+    <nom>ITV with Bad Email</nom>
+    <adreca>Carrer Fals 3</adreca>
+    <ciutat>Barcelona</ciutat>
+    <provincia>Barcelona</provincia>
+    <codi_postal>08001</codi_postal>
+    <latitud>41.3851</latitud>
+    <longitud>2.1734</longitud>
+    <telefon>932333333</telefon>
+    <email>invalid-email-format@</email>
+  </station>
+
+  <!-- Invalid postal code (not 5 digits) -->
+  <station>
+    <id>CAT_BAD_CP_001</id>
+    <nom>ITV with Invalid CP</nom>
+    <adreca>Carrer Fals 4</adreca>
+    <ciutat>Barcelona</ciutat>
+    <provincia>Barcelona</provincia>
+    <codi_postal>080</codi_postal>
+    <latitud>41.3851</latitud>
+    <longitud>2.1734</longitud>
+    <telefon>932444444</telefon>
+    <email>short@postal.cat</email>
+  </station>
+
+  <!-- Duplicate ID (second one should be rejected) -->
+  <station>
+    <id>CAT_BCN_001</id>
+    <nom>ITV Barcelona Sud (DUPLICATE)</nom>
+    <adreca>Carrer dels Rius 999</adreca>
+    <ciutat>Barcelona</ciutat>
+    <provincia>Barcelona</provincia>
+    <codi_postal>08030</codi_postal>
+    <latitud>41.3500</latitud>
+    <longitud>2.1500</longitud>
+    <telefon>932555555</telefon>
+    <email>duplicate@duplicate.cat</email>
+  </station>
+
+  <!-- Malformed coordinate (text instead of number) -->
+  <station>
+    <id>CAT_MALFORMED_001</id>
+    <nom>ITV Malformed Coords</nom>
+    <adreca>Carrer Fals 5</adreca>
+    <ciutat>Barcelona</ciutat>
+    <provincia>Barcelona</provincia>
+    <codi_postal>08001</codi_postal>
+    <latitud>invalid_lat</latitud>
+    <longitud>2.1734</longitud>
+    <telefon>932666666</telefon>
+    <email>malformed@coords.cat</email>
+  </station>
+
+  <!-- All coordinate fields missing (incomplete location data) -->
+  <station>
+    <id>CAT_NO_COORDS</id>
+    <nom>ITV Without Coordinates</nom>
+    <adreca>Carrer Fals 6</adreca>
+    <ciutat>Barcelona</ciutat>
+    <provincia>Barcelona</provincia>
+    <codi_postal>08001</codi_postal>
+    <telefon>932777777</telefon>
+    <email>nocoords@location.cat</email>
+  </station>
+
+</stations>

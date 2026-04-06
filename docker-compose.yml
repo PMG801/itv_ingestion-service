@@ -1,0 +1,204 @@
+services:
+  # ============ INFRASTRUCTURE ============
+  
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: itv_rabbitmq
+    hostname: rabbitmq
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-admin123}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-itv_data}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      # - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      # - ./infra/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+    networks:
+      - itv_network
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1GB
+        reservations:
+          cpus: "0.25"
+          memory: 256MB
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  postgres:
+    image: postgis/postgis:15-3.4-alpine
+    container_name: itv_postgres
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-itv_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-itv_pass123}
+      POSTGRES_DB: ${POSTGRES_DB:-itv_database}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    networks:
+      - itv_network
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1GB
+        reservations:
+          cpus: "0.25"
+          memory: 256MB
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-itv_user} -d ${POSTGRES_DB:-itv_database}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=50"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "effective_cache_size=1GB"
+      - "-c"
+      - "work_mem=16MB"
+
+  # ============ APPLICATIONS ============
+  
+  gateway:
+    build:
+      context: .
+      dockerfile: apps/gateway/Dockerfile
+    container_name: itv_gateway
+    ports:
+      - "${GATEWAY_PORT:-8000}:8000"
+    environment:
+      APP_NAME: "ITV Gateway Service"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_PASS: ${RABBITMQ_PASS:-admin123}
+      RABBITMQ_VHOST: ${RABBITMQ_VHOST:-itv_data}
+      PYTHONUNBUFFERED: 1
+      PYTHONPATH: /app
+    volumes:
+      - ./apps/gateway:/app/apps/gateway
+      - ./core:/app/core
+      - ./domain:/app/domain
+    networks:
+      - itv_network
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256MB
+        reservations:
+          cpus: "0.1"
+          memory: 128MB
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  normalizer:
+    build:
+      context: .
+      dockerfile: apps/normalizer/Dockerfile
+    environment:
+      APP_NAME: "ITV Normalizer Worker"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_PASS: ${RABBITMQ_PASS:-admin123}
+      RABBITMQ_VHOST: ${RABBITMQ_VHOST:-itv_data}
+      INPUT_QUEUE: raw_data.itv_stations
+      OUTPUT_EXCHANGE: normalized_data
+      PYTHONUNBUFFERED: 1
+      PYTHONPATH: /app
+    volumes:
+      - ./apps/normalizer:/app/apps/normalizer
+      - ./core:/app/core
+      - ./domain:/app/domain
+      - ./providers:/app/providers
+    networks:
+      - itv_network
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512MB
+        reservations:
+          cpus: "0.5"
+          memory: 256MB
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  persister:
+    build:
+      context: .
+      dockerfile: apps/persister/Dockerfile
+    environment:
+      APP_NAME: "ITV Persister Worker"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_PASS: ${RABBITMQ_PASS:-admin123}
+      RABBITMQ_VHOST: ${RABBITMQ_VHOST:-itv_data}
+      INPUT_QUEUE: normalized_data.itv_stations
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-itv_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-itv_pass123}
+      POSTGRES_DB: ${POSTGRES_DB:-itv_database}
+      PERSISTER_BATCH_SIZE: ${PERSISTER_BATCH_SIZE:-100}
+      PERSISTER_BATCH_TIMEOUT_MS: ${PERSISTER_BATCH_TIMEOUT_MS:-50}
+      PERSISTER_RETRY_MAX_ATTEMPTS: ${PERSISTER_RETRY_MAX_ATTEMPTS:-3}
+      PERSISTER_RETRY_BASE_DELAY_MS: ${PERSISTER_RETRY_BASE_DELAY_MS:-200}
+      PYTHONUNBUFFERED: 1
+      PYTHONPATH: /app
+    volumes:
+      - ./apps/persister:/app/apps/persister
+      - ./core:/app/core
+      - ./domain:/app/domain
+    networks:
+      - itv_network
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128MB
+        reservations:
+          cpus: "0.1"
+          memory: 64MB
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  rabbitmq_data:
+    driver: local
+  postgres_data:
+    driver: local
+
+networks:
+  itv_network:
+    driver: bridge
+    name: itv_network

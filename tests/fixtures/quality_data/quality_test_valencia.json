@@ -1,0 +1,203 @@
+{
+  "estaciones": [
+    {
+      "description": "==== VALID RECORDS ====",
+      "_comment": "These records have all required fields with correct format and valid coordinates"
+    },
+    {
+      "codigo": "VAL_VLC_001",
+      "nombre": "ITV Valencia Centro",
+      "direccion": "Calle de la Industria 123",
+      "poblacion": "Valencia",
+      "provincia": "Valencia",
+      "codigo_postal": "46001",
+      "latitud": 39.4699,
+      "longitud": -0.3763,
+      "telefono": "963456789",
+      "correo": "info@valencia-centro.es"
+    },
+    {
+      "codigo": "VAL_CAS_001",
+      "nombre": "ITV Castellon Litoral",
+      "direccion": "Avenida Industrial 456",
+      "poblacion": "Castellon",
+      "provincia": "Castellon",
+      "codigo_postal": "12001",
+      "latitud": 40.5735,
+      "longitud": -0.0426,
+      "telefono": "964567890",
+      "correo": "contacto@castellon-itv.es"
+    },
+    {
+      "codigo": "VAL_ALC_001",
+      "nombre": "ITV Alicante Puerto",
+      "direccion": "Calle del Mar 789",
+      "poblacion": "Alicante",
+      "provincia": "Alicante",
+      "codigo_postal": "03001",
+      "latitud": 38.3452,
+      "longitud": -0.4829,
+      "telefono": "965678901",
+      "correo": "info@alicante-puerto.es"
+    },
+    {
+      "description": "==== EDGE CASES (VALID BUT RISKY) ====",
+      "_comment": "These records are technically valid but contain potentially problematic data"
+    },
+    {
+      "codigo": "VAL_REQU_001",
+      "nombre": "ITV Requena Valley",
+      "direccion": "Camino Rural s/n",
+      "poblacion": "Requena",
+      "provincia": "Valencia",
+      "codigo_postal": "46340",
+      "latitud": 40.4806,
+      "longitud": -1.1367,
+      "correo": "complex.email+soporte@requena-itv.co.es"
+    },
+    {
+      "codigo": "VAL_MIN_001",
+      "nombre": "ITV Minimal Record",
+      "direccion": "",
+      "poblacion": "Valencia",
+      "provincia": "Valencia",
+      "codigo_postal": "46015",
+      "latitud": 39.47,
+      "longitud": -0.37,
+      "telefono": "",
+      "correo": "minimal@valencia.es"
+    },
+    {
+      "description": "==== INVALID RECORDS (SHOULD BE REJECTED) ====",
+      "_comment": "These records contain errors and should be filtered by normalizer"
+    },
+    {
+      "nombre": "ITV Sin Codigo",
+      "direccion": "Calle Test 1",
+      "poblacion": "Valencia",
+      "provincia": "Valencia",
+      "codigo_postal": "46001",
+      "latitud": 39.4699,
+      "longitud": -0.3763,
+      "telefono": "963111111",
+      "correo": "missing@codigo.es"
+    },
+    {
+      "codigo": "VAL_NO_NAME",
+      "direccion": "Calle Test 2",
+      "poblacion": "Valencia",
+      "provincia": "Valencia",
+      "codigo_postal": "46001",
+      "latitud": 39.4699,
+      "longitud": -0.3763,
+      "telefono": "963222222",
+      "correo": "missing@nombre.es"
+    },
+    {
+      "codigo": "VAL_INVALID_LAT_001",
+      "nombre": "ITV Invalid Latitude",
+      "direccion": "Calle Test 3",
+      "poblacion": "Valencia",
+      "provincia": "Valencia",
+      "codigo_postal": "46001",
+      "latitud": 55.5555,
+      "longitud": -0.3763,
+      "telefono": "963333333",
+      "correo": "invalid@latitude.es"
+    },
+    {
+      "codigo": "VAL_INVALID_LON_001",
+      "nombre": "ITV Invalid Longitude",
+      "direccion": "Calle Test 4",
+      "poblacion": "Valencia",
+      "provincia": "Valencia",
+      "codigo_postal": "46001",
+      "latitud": 39.4699,
+      "longitud": -25.5555,
+      "telefono": "963444444",
+      "correo": "invalid@longitude.es"
+    },
+    {
+      "codigo": "VAL_BAD_EMAIL_001",
+      "nombre": "ITV Bad Email Format",
+      "direccion": "Calle Test 5",
+      "poblacion": "Valencia",
+      "provincia": "Valencia",
+      "codigo_postal": "46001",
+      "latitud": 39.4699,
+      "longitud": -0.3763,
+      "telefono": "963555555",
+      "correo": "invalid-email-@"
+    },
+    {
+      "codigo": "VAL_SHORT_CP_001",
+      "nombre": "ITV Short Postal Code",
+      "direccion": "Calle Test 6",
+      "poblacion": "Valencia",
+      "provincia": "Valencia",
+      "codigo_postal": "460",
+      "latitud": 39.4699,
+      "longitud": -0.3763,
+      "telefono": "963666666",
+      "correo": "short@postal.es"
+    },
+    {
+      "codigo": "VAL_LONG_CP_001",
+      "nombre": "ITV Long Postal Code",
+      "direccion": "Calle Test 7",
+      "poblacion": "Valencia",
+      "provincia": "Valencia",
+      "codigo_postal": "4600123",
+      "latitud": 39.4699,
+      "longitud": -0.3763,
+      "telefono": "963777777",
+      "correo": "long@postal.es"
+    },
+    {
+      "codigo": "VAL_VLC_001",
+      "nombre": "ITV Duplicate ID",
+      "direccion": "Calle Test 8",
+      "poblacion": "Valencia",
+      "provincia": "Valencia",
+      "codigo_postal": "46001",
+      "latitud": 39.47,
+      "longitud": -0.38,
+      "telefono": "963999999",
+      "correo": "duplicate@valencia.es"
+    },
+    {
+      "codigo": "VAL_NULL_LAT_001",
+      "nombre": "ITV Null Latitude",
+      "direccion": "Calle Test 9",
+      "poblacion": "Valencia",
+      "provincia": "Valencia",
+      "codigo_postal": "46001",
+      "latitud": null,
+      "longitud": -0.3763,
+      "telefono": "963888888",
+      "correo": "null@latitude.es"
+    },
+    {
+      "codigo": "VAL_TEXT_COORD_001",
+      "nombre": "ITV Text Coordinates",
+      "direccion": "Calle Test 10",
+      "poblacion": "Valencia",
+      "provincia": "Valencia",
+      "codigo_postal": "46001",
+      "latitud": "thirty-nine",
+      "longitud": "minus-zero",
+      "telefono": "963101010",
+      "correo": "text@coords.es"
+    },
+    {
+      "codigo": "VAL_NO_COORDS_001",
+      "nombre": "ITV No Coordinates",
+      "direccion": "Calle Test 11",
+      "poblacion": "Valencia",
+      "provincia": "Valencia",
+      "codigo_postal": "46001",
+      "telefono": "963121212",
+      "correo": "nocoords@valencia.es"
+    }
+  ]
+}

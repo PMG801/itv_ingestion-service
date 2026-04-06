@@ -1,0 +1,14 @@
+<stations>
+  <station>
+    <id>BCN-001</id>
+    <nom>  ITV Barcelona Nord  </nom>
+    <adreca>Carrer de la Indústria 123</adreca>
+    <ciutat>Barcelona</ciutat>
+    <provincia>Barcelona</provincia>
+    <codi_postal>08025</codi_postal>
+    <latitud>41,3851</latitud>
+    <longitud>2,1734</longitud>
+    <telefon>932 123 456</telefon>
+    <email>info@itvbarcelona.cat</email>
+  </station>
+</stations>

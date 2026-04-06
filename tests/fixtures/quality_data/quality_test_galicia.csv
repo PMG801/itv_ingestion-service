@@ -1,0 +1,22 @@
+id,nome,enderezo,concello,provincia,cp,lat,lon,telefono,email
+# ===== VALID RECORDS =====
+GAL_LU_001,ITV Lugo Centro,Rúa da Industria 123,Lugo,Lugo,27001,43.0097,-7.5567,982123456,info@lugo-centro.gal
+GAL_OR_001,ITV Ourense Industrial,Avenida Industrial 456,Ourense,Ourense,32001,42.3387,-7.8643,988234567,contacto@ourense-itv.gal
+GAL_PO_001,ITV Pontevedra Costa,Estrada da Costa 789,Pontevedra,Pontevedra,36001,42.4401,-8.6430,986345678,info@pontevedra.gal
+GAL_COR_001,ITV Coruna Maritima,Rúa do Mar 1000,A Coruna,A Coruna,15001,43.3623,-8.3886,981456789,porto@coruna.gal
+# ===== EDGE CASES (VALID BUT RISKY) =====
+GAL_VIL_001,ITV Vilagarcia Rural,Camino Rural s/n,Vilagarcia,Pontevedra,36600,42.6086,-8.7657,986567890,support+rural@vilagarcia.gal
+GAL_MON_001,ITV Monforte Minimal,Avenida 10,Monforte,Lugo,27400,42.5386,-7.5055,,minimal@monforte.gal
+# ===== INVALID RECORDS (SHOULD BE REJECTED) =====
+,ITV Galicia No ID,Rúa Fals 1,Galicia,Galicia,99999,43.0,,-7.5,missing@id.gal
+GAL_NONAME_001,,Rúa Fals 2,Galicia,Galicia,99999,43.0,-7.5,982111111,missing@name.gal
+GAL_INVALID_LAT_001,ITV Bad Latitude,Rúa Fals 3,Galicia,Galicia,99999,55.5555,-7.5,982222222,badlat@galicia.gal
+GAL_INVALID_LON_001,ITV Bad Longitude,Rúa Fals 4,Galicia,Galicia,99999,43.0,-25.5555,982333333,badlon@galicia.gal
+GAL_BAD_EMAIL_001,ITV Bad Email,Rúa Fals 5,Galicia,Galicia,99999,43.0,-7.5,982444444,invalid-@email
+GAL_SHORT_CP_001,ITV Short CP,Rúa Fals 6,Galicia,Galicia,999,43.0,-7.5,982555555,shortcp@galicia.gal
+GAL_LONG_CP_001,ITV Long CP,Rúa Fals 7,Galicia,Galicia,9999999,43.0,-7.5,982666666,longcp@galicia.gal
+GAL_LU_001,ITV Duplicate ID,Rúa Fals 8,Galicia,Galicia,99999,43.1,-7.6,982777777,duplicate@galicia.gal
+GAL_NULL_LAT_001,ITV Null Latitude,Rúa Fals 9,Galicia,Galicia,99999,null,-7.5,982888888,nulllat@galicia.gal
+GAL_TEXT_COORD_001,ITV Text Coordinates,Rúa Fals 10,Galicia,Galicia,99999,quarenta_e_tres,-sete_punto_cinco,982999999,textcoord@galicia.gal
+GAL_NO_COORDS_001,ITV No Coordinates,Rúa Fals 11,Galicia,Galicia,99999,,,983000000,nocoords@galicia.gal
+GAL_EMPTY_001,ITV Empty Fields,,,,,,,983111111,empty@galicia.gal

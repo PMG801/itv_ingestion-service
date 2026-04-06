@@ -1,0 +1,1 @@
+# Persister worker - Database persistence

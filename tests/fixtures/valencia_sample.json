@@ -1,0 +1,16 @@
+{
+  "estaciones": [
+    {
+      "codigo": "VAL-042",
+      "nombre": "  ITV Valencia Norte  ",
+      "direccion": "Calle de la Industria 456",
+      "poblacion": "Valencia",
+      "provincia": "Valencia",
+      "codigo_postal": "46015",
+      "latitud": 39.4699,
+      "longitud": -0.3763,
+      "telefono": "963 456 789",
+      "correo": "contacto@itvvalencia.es"
+    }
+  ]
+}
