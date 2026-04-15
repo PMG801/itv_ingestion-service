@@ -3,8 +3,10 @@ from __future__ import annotations
 import pytest
 
 from apps.normalizer.factory import TransformerFactory
+from core.config import settings
 from domain.itv_stations.transformers.base import BaseTransformer
 from domain.itv_stations.transformers.catalunya import CatalunyaTransformer
+from domain.itv_stations.transformers.fuzzy import FuzzyTransformer
 
 
 class DummyTransformer(BaseTransformer):
@@ -82,3 +84,18 @@ def test_factory_create_all_sources() -> None:
         transformer = TransformerFactory.create(source)
         assert isinstance(transformer, BaseTransformer)
         assert transformer.source_system == source
+
+
+def test_factory_creates_fuzzy_transformer_when_mode_is_fuzzy(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "NORMALIZATION_MODE", "FUZZY")
+
+    transformer = TransformerFactory.create("unsupported-source")
+
+    assert isinstance(transformer, FuzzyTransformer)
+
+
+def test_factory_rejects_invalid_normalization_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "NORMALIZATION_MODE", "BROKEN")
+
+    with pytest.raises(ValueError, match="Unsupported normalization mode"):
+        TransformerFactory.create("catalunya")

@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     # Application settings
     APP_NAME: str = "ITV Ingestion Service"
     LOG_LEVEL: str = "INFO"
+    NORMALIZATION_MODE: str = "RULES"
+    FUZZY_THRESHOLD_HIGH: float = 0.85
+    FUZZY_THRESHOLD_LOW: float = 0.70
+    FUZZY_ALGORITHM: str = "jaro_winkler"
 
     # RabbitMQ settings
     RABBITMQ_HOST: str = "rabbitmq"
