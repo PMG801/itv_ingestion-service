@@ -76,9 +76,29 @@ class FuzzyTransformer(BaseTransformer):
             "_confidence_sum": 0.0,
             "_confidence_count": 0,
         }
+        # Mapping cache: stores (source_field_normalized, target_field_normalized) -> similarity_score
+        # This memoizes field similarity calculations across all records processed by this transformer instance
+        # Once a field mapping is decided for a source (e.g., Valencia), it is cached for the process lifetime
+        self._mapping_cache: dict[tuple[str, str], float] = {}
 
     def _increment_metric(self, metric_name: str, amount: int = 1) -> None:
         self.last_metrics[metric_name] = int(self.last_metrics.get(metric_name, 0)) + amount
+
+    def get_cache_stats(self) -> dict[str, int]:
+        """
+        Return statistics about the mapping cache.
+        
+        Returns:
+            Dictionary with cache size and hit info for monitoring/debugging.
+        """
+        return {
+            "cache_size": len(self._mapping_cache),
+            "source_system": self.source_system,
+        }
+
+    def clear_cache(self) -> None:
+        """Clear all cached field mappings. Use sparingly during process lifetime."""
+        self._mapping_cache.clear()
 
     def _similarity_score(self, source_field: str, target_field: str) -> float:
         return float(JaroWinkler.normalized_similarity(source_field, target_field))
@@ -99,14 +119,23 @@ class FuzzyTransformer(BaseTransformer):
         source_normalized = self._normalize_field_name(source_field)
         target_normalized = self._normalize_field_name(target_field)
 
+        # Check memoization cache first
+        cache_key = (source_normalized, target_normalized)
+        if cache_key in self._mapping_cache:
+            return self._mapping_cache[cache_key]
+
+        # Compute score and cache it
         if source_normalized == target_normalized:
-            return 1.0
+            score = 1.0
+        else:
+            aliases = self._field_aliases.get(target_field, ())
+            if source_normalized in aliases:
+                score = 1.0
+            else:
+                score = self._similarity_score(source_normalized, target_normalized)
 
-        aliases = self._field_aliases.get(target_field, ())
-        if source_normalized in aliases:
-            return 1.0
-
-        return self._similarity_score(source_normalized, target_normalized)
+        self._mapping_cache[cache_key] = score
+        return score
 
     def _map_payload_fields(
         self, payload: Mapping[str, object]

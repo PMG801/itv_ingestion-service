@@ -253,3 +253,118 @@ LU-009,ITV Lugo Sur,Rúa da Industria 9,Lugo,Lugo,27001,43.0097,-7.5567,98212399
         assert station.name == "ITV Lugo Sur"
         assert station.postal_code == "27001"
         assert int(transformer.last_metrics["rejected_by_fuzzy_count"]) == 0
+
+
+def test_fuzzy_transformer_mapping_cache_initialization() -> None:
+    """Test that mapping cache is initialized empty."""
+    transformer = FuzzyTransformer(source_system="valencia")
+    assert len(transformer._mapping_cache) == 0
+    stats = transformer.get_cache_stats()
+    assert stats["cache_size"] == 0
+    assert stats["source_system"] == "valencia"
+
+
+def test_fuzzy_transformer_mapping_cache_populates() -> None:
+    """Test that mapping cache is populated during transform."""
+    transformer = FuzzyTransformer(source_system="valencia")
+    payload = {
+        "estaciones": [
+            {
+                "codigo": "VAL-001",
+                "nombre": "ITV Valencia",
+                "direccion": "Calle 123",
+                "poblacion": "Valencia",
+                "provincia": "Valencia",
+                "codigo_postal": "46001",
+                "latitud": 39.47,
+                "longitud": -0.37,
+                "telefono": "963456789",
+                "correo": "info@itv.es",
+            }
+        ]
+    }
+
+    # Cache should be empty before transform
+    assert len(transformer._mapping_cache) == 0
+
+    transformer.transform(payload)
+
+    # Cache should contain entries after transform
+    assert len(transformer._mapping_cache) > 0
+
+
+def test_fuzzy_transformer_mapping_cache_reuses_across_records() -> None:
+    """Test that mapping cache is reused for multiple records."""
+    transformer = FuzzyTransformer(source_system="valencia")
+    
+    # First payload
+    payload1 = {
+        "estaciones": [
+            {
+                "codigo": "VAL-001",
+                "nombre": "ITV Valencia",
+                "direccion": "Calle 123",
+                "poblacion": "Valencia",
+                "provincia": "Valencia",
+                "codigo_postal": "46001",
+                "latitud": 39.47,
+                "longitud": -0.37,
+                "telefono": "963456789",
+                "correo": "info@itv.es",
+            }
+        ]
+    }
+    
+    transformer.transform(payload1)
+    cache_size_after_first = len(transformer._mapping_cache)
+    
+    # Second payload with same field names (should reuse cache)
+    payload2 = {
+        "estaciones": [
+            {
+                "codigo": "VAL-002",
+                "nombre": "ITV Valencia Norte",
+                "direccion": "Calle 456",
+                "poblacion": "Valencia",
+                "provincia": "Valencia",
+                "codigo_postal": "46015",
+                "latitud": 39.48,
+                "longitud": -0.38,
+                "telefono": "963456790",
+                "correo": "norte@itv.es",
+            }
+        ]
+    }
+    
+    transformer.transform(payload2)
+    cache_size_after_second = len(transformer._mapping_cache)
+    
+    # Cache size should remain the same (reused entries)
+    assert cache_size_after_first == cache_size_after_second
+
+
+def test_fuzzy_transformer_clear_cache() -> None:
+    """Test that clear_cache() properly clears the mapping cache."""
+    transformer = FuzzyTransformer(source_system="galicia")
+    payload = {
+        "stations": [
+            {
+                "id": "LU-001",
+                "nome": "ITV Lugo",
+                "enderezo": "Rúa 123",
+                "concello": "Lugo",
+                "provincia": "Lugo",
+                "cp": "27001",
+                "lat": 43.01,
+                "lon": -7.56,
+                "telefono": "982123456",
+                "correo": "info@itv.gal",
+            }
+        ]
+    }
+
+    transformer.transform(payload)
+    assert len(transformer._mapping_cache) > 0
+    
+    transformer.clear_cache()
+    assert len(transformer._mapping_cache) == 0
