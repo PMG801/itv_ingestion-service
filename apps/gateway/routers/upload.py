@@ -30,6 +30,8 @@ async def inject_synthetic_data(
     request: Request,
     source: str,
     count: int = Query(10, ge=1, le=10000),
+    error_rate: float = Query(0.0, ge=0.0, le=1.0),
+    include_errors: list[str] = Query(default=[]),
     session: AsyncSession = Depends(get_async_session),
 ) -> dict[str, Any]:
     """
@@ -46,6 +48,10 @@ async def inject_synthetic_data(
     Example:
         POST /api/v1/inject/synthetic/catalunya?count=50
 
+    Query Parameters:
+        error_rate: Probability of injecting an error (0.0-1.0, default 0.0)
+        include_errors: Error types allowed in the synthetic generator
+
     Returns: {
         "status": "accepted",
         "injection_type": "synthetic",
@@ -60,6 +66,27 @@ async def inject_synthetic_data(
     if source not in valid_sources:
         raise HTTPException(
             status_code=400, detail=f"Invalid source: {source}. Must be one of: {valid_sources}"
+        )
+
+    if not isinstance(error_rate, (int, float)):
+        error_rate = 0.0
+    if not isinstance(include_errors, list):
+        include_errors = []
+
+    valid_error_types = {
+        "invalid_coordinates",
+        "missing_field",
+        "duplicate",
+        "malformed_phone",
+    }
+    invalid_error_types = [error_type for error_type in include_errors if error_type not in valid_error_types]
+    if invalid_error_types:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Invalid error types: {invalid_error_types}. "
+                f"Must be one of: {sorted(valid_error_types)}"
+            ),
         )
 
     from typing import Literal
@@ -84,8 +111,8 @@ async def inject_synthetic_data(
         payload_dict = SyntheticDataGenerator.generate_stations(
             source=source_literal,
             count=count,
-            error_rate=0.0,
-            include_errors=[],
+            error_rate=error_rate,
+            include_errors=include_errors,
         )
 
         # Generar message_id único para este lote
@@ -102,8 +129,8 @@ async def inject_synthetic_data(
             "synthetic",
             {
                 "generated_count": count,
-                "error_rate": 0.0,
-                "error_types": [],
+                "error_rate": error_rate,
+                "error_types": include_errors,
             },
         )
         session.add(log_entry)
@@ -140,6 +167,8 @@ async def inject_synthetic_data(
             "message_id": message_id,
             "source": source,
             "count": count,
+            "error_rate": error_rate,
+            "include_errors": include_errors,
             "queued_messages": len(station_payloads),
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }

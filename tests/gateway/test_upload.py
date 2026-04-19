@@ -54,6 +54,81 @@ async def test_inject_synthetic_data_valid_sources() -> None:
 
 
 @pytest.mark.asyncio
+async def test_inject_synthetic_data_rejects_invalid_error_types() -> None:
+    """Test that inject_synthetic_data validates requested synthetic error types."""
+    mock_request = MagicMock()
+    mock_request.app.state.rabbitmq = MagicMock()
+    mock_request.app.state.rabbitmq.is_connected = True
+
+    mock_session = MagicMock()
+    mock_session.commit = AsyncMock()
+    mock_session.rollback = AsyncMock()
+
+    with pytest.raises(HTTPException) as exc_info:
+        await inject_synthetic_data(
+            request=mock_request,
+            source="catalunya",
+            count=1,
+            error_rate=0.5,
+            include_errors=["invalid_field"],
+            session=mock_session,
+        )
+
+    assert exc_info.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_inject_synthetic_data_passes_error_controls_to_generator(monkeypatch) -> None:
+    """Test that inject_synthetic_data forwards synthetic error settings to the generator."""
+    mock_request = MagicMock()
+    mock_request.app.state.rabbitmq = MagicMock()
+    mock_request.app.state.rabbitmq.is_connected = True
+    mock_request.app.state.rabbitmq.publish = AsyncMock()
+
+    mock_session = MagicMock()
+    mock_session.commit = AsyncMock()
+    mock_session.rollback = AsyncMock()
+
+    generator_mock = MagicMock(
+        generate_stations=MagicMock(return_value={
+            "stations": [
+                {
+                    "id": "CAT-000001",
+                    "nom": "ITV Barcelona - Fija 0001",
+                    "adreca": "Carrer Example 1",
+                    "ciutat": "BARCELONA",
+                    "provincia": "BARCELONA",
+                    "codi_postal": "08001",
+                    "latitud": 41.0,
+                    "longitud": 2.0,
+                    "telefon": "932123456",
+                    "email": "info@example.com",
+                }
+            ]
+        })
+    )
+    monkeypatch.setattr("apps.gateway.routers.upload.SyntheticDataGenerator", generator_mock)
+
+    result = await inject_synthetic_data(
+        request=mock_request,
+        source="catalunya",
+        count=1,
+        error_rate=0.25,
+        include_errors=["missing_field"],
+        session=mock_session,
+    )
+
+    generator_mock.generate_stations.assert_called_once_with(
+        source="catalunya",
+        count=1,
+        error_rate=0.25,
+        include_errors=["missing_field"],
+    )
+    assert result["error_rate"] == 0.25
+    assert result["include_errors"] == ["missing_field"]
+
+
+@pytest.mark.asyncio
 async def test_inject_synthetic_data_requires_rabbitmq() -> None:
     """Test that inject_synthetic_data requires RabbitMQ."""
     mock_request = MagicMock()

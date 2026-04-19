@@ -37,9 +37,6 @@ Sistema backend de alto rendimiento para la ingesta, normalización y persistenc
 │   └── /logging          # Configuración de logs
 ├── /domain               # Lógica de negocio
 │   └── /itv_stations     # Dominio ITV
-├── /providers            # Adaptadores de APIs externas
-│   ├── /catalunya_api    # XML Cataluña
-│   └── /valencia_api     # JSON Valencia
 ├── /infra                # Configuración de infraestructura
 │   ├── /rabbitmq         # Definiciones y configuración
 │   └── /postgres         # Scripts de inicialización

@@ -23,7 +23,6 @@ RUN pdm install --prod --no-lock --no-self
 COPY apps/normalizer ./apps/normalizer
 COPY core ./core
 COPY domain ./domain
-COPY providers ./providers
 
 # Create non-root user
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app

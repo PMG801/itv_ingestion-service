@@ -4,11 +4,23 @@ Fuzzy data transformer based on field-name similarity.
 
 from __future__ import annotations
 
+import csv
+import io
+import xml.etree.ElementTree as ET
 from collections.abc import Mapping
 from time import perf_counter
 from typing import Any
+import unicodedata
 
-from rapidfuzz.distance import JaroWinkler
+from difflib import SequenceMatcher
+
+try:
+    from rapidfuzz.distance import JaroWinkler
+except ModuleNotFoundError:
+    class JaroWinkler:
+        @staticmethod
+        def normalized_similarity(source_field: str, target_field: str) -> float:
+            return SequenceMatcher(None, source_field, target_field).ratio()
 
 from core.config import settings
 from domain.itv_stations.schemas import NormalizedStation
@@ -32,6 +44,28 @@ class FuzzyTransformer(BaseTransformer):
     )
     _required_fields: tuple[str, ...] = ("raw_id", "name")
     _top_candidates: int = 3
+
+    # Canonical aliases (already normalized) to support source-specific key names.
+    _field_aliases: dict[str, tuple[str, ...]] = {
+        "raw_id": ("raw_id", "id", "codigo", "code", "identifier", "station_id"),
+        "name": ("name", "nom", "nome", "nombre"),
+        "address": ("address", "adreca", "enderezo", "direccion"),
+        "city": ("city", "ciutat", "concello", "poblacion"),
+        "province": ("province", "provincia"),
+        "postal_code": (
+            "postal_code",
+            "codi_postal",
+            "codigo_postal",
+            "cp",
+            "zip",
+            "zip_code",
+        ),
+        "latitude": ("latitude", "latitud", "lat"),
+        "longitude": ("longitude", "longitud", "lon", "lng"),
+        "phone": ("phone", "telefon", "telefono", "tel"),
+        "email": ("email", "correo", "mail", "e_mail"),
+    }
+
     def __init__(self, source_system: str = "catalunya") -> None:
         super().__init__(source_system=source_system.lower().strip())
         self.last_metrics: dict[str, float | int] = {
@@ -49,6 +83,31 @@ class FuzzyTransformer(BaseTransformer):
     def _similarity_score(self, source_field: str, target_field: str) -> float:
         return float(JaroWinkler.normalized_similarity(source_field, target_field))
 
+    def _normalize_field_name(self, field_name: str) -> str:
+        normalized = unicodedata.normalize("NFKD", field_name)
+        ascii_only = normalized.encode("ascii", "ignore").decode("ascii")
+        cleaned = (
+            ascii_only.lower()
+            .replace("-", "_")
+            .replace(" ", "_")
+            .replace(".", "_")
+            .replace("/", "_")
+        )
+        return "_".join(part for part in cleaned.split("_") if part)
+
+    def _field_match_score(self, source_field: str, target_field: str) -> float:
+        source_normalized = self._normalize_field_name(source_field)
+        target_normalized = self._normalize_field_name(target_field)
+
+        if source_normalized == target_normalized:
+            return 1.0
+
+        aliases = self._field_aliases.get(target_field, ())
+        if source_normalized in aliases:
+            return 1.0
+
+        return self._similarity_score(source_normalized, target_normalized)
+
     def _map_payload_fields(
         self, payload: Mapping[str, object]
     ) -> tuple[dict[str, object], list[dict[str, object]], list[str], list[float]]:
@@ -65,7 +124,7 @@ class FuzzyTransformer(BaseTransformer):
                     (
                         source_field_name,
                         source_field_original,
-                        self._similarity_score(source_field_name, target_field),
+                        self._field_match_score(source_field_name, target_field),
                     )
                     for source_field_name, source_field_original in payload_fields
                 ),
@@ -165,6 +224,67 @@ class FuzzyTransformer(BaseTransformer):
         self._increment_metric("low_confidence_count", len(low_confidence_fields))
         return station
 
+    def _finalize_transformed(self, transformed: list[NormalizedStation], start: float) -> list[NormalizedStation]:
+        transformed = self._check_duplicate_within_message(transformed)
+        transformed = self._check_duplicate_contact_fields(transformed)
+
+        confidence_sum = float(self.last_metrics.pop("_confidence_sum", 0.0))
+        confidence_count = int(self.last_metrics.pop("_confidence_count", 0))
+        if confidence_count > 0:
+            self.last_metrics["confidence_mean"] = round(confidence_sum / confidence_count, 4)
+        else:
+            self.last_metrics["confidence_mean"] = 0.0
+        self.last_metrics["similarity_compute_ms"] = round((perf_counter() - start) * 1000, 3)
+        return transformed
+
+    def _transform_xml(self, xml_payload: str) -> list[NormalizedStation]:
+        try:
+            root = ET.fromstring(xml_payload)
+        except ET.ParseError as error:
+            raise ValueError(f"Invalid XML format: {error}") from error
+
+        station_nodes = list(root.findall("station"))
+        if not station_nodes:
+            station_nodes = [root]
+
+        stations: list[NormalizedStation] = []
+        for node in station_nodes:
+            station_data = {
+                child.tag: (child.text or "").strip()
+                for child in list(node)
+                if child.tag
+            }
+            if not station_data:
+                self.record_rejection(
+                    "invalid_station_payload_type",
+                    ET.tostring(node, encoding="unicode"),
+                )
+                continue
+
+            station = self._transform_one(station_data)
+            if station:
+                stations.append(station)
+
+        return stations
+
+    def _transform_csv(self, csv_payload: str) -> list[NormalizedStation]:
+        try:
+            reader = csv.DictReader(io.StringIO(csv_payload.strip()))
+        except csv.Error as error:
+            raise ValueError(f"Invalid CSV format: {error}") from error
+
+        stations: list[NormalizedStation] = []
+        for row in reader:
+            if not isinstance(row, dict):
+                self.record_rejection("invalid_station_payload_type", {"value": str(row)})
+                continue
+
+            station = self._transform_one(row)
+            if station:
+                stations.append(station)
+
+        return stations
+
     def transform(self, raw_payload: Any) -> list[NormalizedStation]:
         self.reset_rejections()
         start = perf_counter()
@@ -192,8 +312,20 @@ class FuzzyTransformer(BaseTransformer):
                 stations_payload = [payload_dict]
         elif isinstance(raw_payload, list):
             stations_payload = [item for item in raw_payload if isinstance(item, Mapping)]
+        elif isinstance(raw_payload, str):
+            stripped_payload = raw_payload.strip()
+            if not stripped_payload:
+                stations_payload = []
+            elif stripped_payload.startswith("<"):
+                transformed = self._transform_xml(stripped_payload)
+                return self._finalize_transformed(transformed, start)
+            else:
+                transformed = self._transform_csv(stripped_payload)
+                return self._finalize_transformed(transformed, start)
         else:
-            raise ValueError(f"Expected dict or list for fuzzy transformation, got {type(raw_payload)}")
+            raise ValueError(
+                f"Expected dict, list or string for fuzzy transformation, got {type(raw_payload)}"
+            )
 
         transformed: list[NormalizedStation] = []
         for station_payload in stations_payload:
@@ -201,15 +333,4 @@ class FuzzyTransformer(BaseTransformer):
             if station:
                 transformed.append(station)
 
-        transformed = self._check_duplicate_within_message(transformed)
-        transformed = self._check_duplicate_contact_fields(transformed)
-
-        confidence_sum = float(self.last_metrics.pop("_confidence_sum", 0.0))
-        confidence_count = int(self.last_metrics.pop("_confidence_count", 0))
-        if confidence_count > 0:
-            self.last_metrics["confidence_mean"] = round(confidence_sum / confidence_count, 4)
-        else:
-            self.last_metrics["confidence_mean"] = 0.0
-        self.last_metrics["similarity_compute_ms"] = round((perf_counter() - start) * 1000, 3)
-
-        return transformed
+        return self._finalize_transformed(transformed, start)

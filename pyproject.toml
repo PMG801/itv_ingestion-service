@@ -89,7 +89,7 @@ test-watch = "pytest-watch"
 # Code Quality
 format = "black ."
 lint = "ruff check ."
-type-check = "mypy apps core domain providers"
+type-check = "mypy apps core domain"
 
 [tool.black]
 line-length = 100

@@ -6,6 +6,7 @@ import pytest
 
 from domain.itv_stations.transformers.base import BaseTransformer
 from domain.itv_stations.transformers.catalunya import CatalunyaTransformer
+from domain.itv_stations.transformers.fuzzy import FuzzyTransformer
 from domain.itv_stations.transformers.galicia import GaliciaTransformer
 from domain.itv_stations.transformers.valencia import ValenciaTransformer
 
@@ -118,3 +119,137 @@ def test_rejected_items_structure() -> None:
     assert "reason" in item
     assert item["reason"] == "test_reason"
     assert "raw_fragment" in item
+
+
+def test_fuzzy_transformer_maps_catalunya_aliases() -> None:
+    transformer = FuzzyTransformer(source_system="catalunya")
+    payload = {
+        "stations": [
+            {
+                "id": "BCN-001",
+                "nom": "  ITV Barcelona Nord  ",
+                "adreca": "Carrer de la Indústria 123",
+                "ciutat": "Barcelona",
+                "provincia": "Barcelona",
+                "codi_postal": "08025",
+                "latitud": "41,3851",
+                "longitud": "2,1734",
+                "telefon": "932 123 456",
+                "email": "info@itvbarcelona.cat",
+            }
+        ]
+    }
+
+    stations = transformer.transform(payload)
+
+    assert len(stations) == 1
+    station = stations[0]
+    assert station.raw_id == "BCN-001"
+    assert station.name == "ITV Barcelona Nord"
+    assert station.city == "BARCELONA"
+    assert station.phone == "+34932123456"
+    assert station.email == "info@itvbarcelona.cat"
+    assert int(transformer.last_metrics["rejected_by_fuzzy_count"]) == 0
+
+
+def test_fuzzy_transformer_maps_galicia_aliases() -> None:
+    transformer = FuzzyTransformer(source_system="galicia")
+    payload = {
+        "stations": [
+            {
+                "id": "LU-001",
+                "nome": "  ITV Lugo Centro  ",
+                "enderezo": "Rúa da Industria 789",
+                "concello": "Lugo",
+                "provincia": "Lugo",
+                "cp": "27001",
+                "lat": 43.0097,
+                "lon": -7.5567,
+                "telefono": "982 123 456",
+                "correo": "info@itvlugo.gal",
+            }
+        ]
+    }
+
+    stations = transformer.transform(payload)
+
+    assert len(stations) == 1
+    station = stations[0]
+    assert station.raw_id == "LU-001"
+    assert station.name == "ITV Lugo Centro"
+    assert station.postal_code == "27001"
+    assert station.latitude == pytest.approx(43.0097)
+    assert station.longitude == pytest.approx(-7.5567)
+    assert int(transformer.last_metrics["rejected_by_fuzzy_count"]) == 0
+
+
+def test_fuzzy_transformer_maps_valencia_aliases() -> None:
+    transformer = FuzzyTransformer(source_system="valencia")
+    payload = {
+        "estaciones": [
+            {
+                "codigo": "VAL-042",
+                "nombre": "  ITV Valencia Norte  ",
+                "direccion": "Calle de la Industria 456",
+                "poblacion": "Valencia",
+                "provincia": "Valencia",
+                "codigo_postal": "46015",
+                "latitud": 39.4699,
+                "longitud": -0.3763,
+                "telefono": "963 456 789",
+                "correo": "contacto@itvvalencia.es",
+            }
+        ]
+    }
+
+    stations = transformer.transform(payload)
+
+    assert len(stations) == 1
+    station = stations[0]
+    assert station.raw_id == "VAL-042"
+    assert station.name == "ITV Valencia Norte"
+    assert station.province == "VALENCIA"
+    assert station.station_id == "VAL_VAL-042"
+    assert int(transformer.last_metrics["rejected_by_fuzzy_count"]) == 0
+
+
+def test_fuzzy_transformer_accepts_xml_payload() -> None:
+        transformer = FuzzyTransformer(source_system="catalunya")
+        payload = """<stations>
+    <station>
+        <id>BCN-009</id>
+        <nom>ITV Barcelona Sants</nom>
+        <adreca>Carrer de Sants 99</adreca>
+        <ciutat>Barcelona</ciutat>
+        <provincia>Barcelona</provincia>
+        <codi_postal>08014</codi_postal>
+        <latitud>41.3760</latitud>
+        <longitud>2.1360</longitud>
+        <telefon>932 999 888</telefon>
+        <email>info@itvsants.cat</email>
+    </station>
+</stations>"""
+
+        stations = transformer.transform(payload)
+
+        assert len(stations) == 1
+        station = stations[0]
+        assert station.raw_id == "BCN-009"
+        assert station.name == "ITV Barcelona Sants"
+        assert station.province == "BARCELONA"
+        assert int(transformer.last_metrics["rejected_by_fuzzy_count"]) == 0
+
+
+def test_fuzzy_transformer_accepts_csv_payload() -> None:
+        transformer = FuzzyTransformer(source_system="galicia")
+        payload = """id,nome,enderezo,concello,provincia,cp,lat,lon,telefono,email
+LU-009,ITV Lugo Sur,Rúa da Industria 9,Lugo,Lugo,27001,43.0097,-7.5567,982123999,info@itvlugosur.gal"""
+
+        stations = transformer.transform(payload)
+
+        assert len(stations) == 1
+        station = stations[0]
+        assert station.raw_id == "LU-009"
+        assert station.name == "ITV Lugo Sur"
+        assert station.postal_code == "27001"
+        assert int(transformer.last_metrics["rejected_by_fuzzy_count"]) == 0

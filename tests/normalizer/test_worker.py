@@ -262,10 +262,10 @@ def test_fuzzy_transformer_accepts_low_confidence_fields_and_records_metrics() -
 def test_fuzzy_transformer_rejects_when_required_field_below_low_threshold() -> None:
     transformer = StubFuzzyTransformer(
         source_system="galicia",
-        scores={("identifier", "raw_id"): 0.65},
+        scores={("registry_code", "raw_id"): 0.65},
     )
     payload = {
-        "identifier": "LUG-2",
+        "registry_code": "LUG-2",
         "name": "ITV Lugo Norte",
     }
 

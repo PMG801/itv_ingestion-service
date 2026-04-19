@@ -18,8 +18,9 @@ class DummyTransformer(BaseTransformer):
 
 
 @pytest.fixture(autouse=True)
-def restore_transformer_registry() -> None:
+def restore_transformer_registry(monkeypatch: pytest.MonkeyPatch) -> None:
     original = TransformerFactory._transformers.copy()
+    monkeypatch.setattr(settings, "NORMALIZATION_MODE", "RULES")
     try:
         yield
     finally:

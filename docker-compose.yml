@@ -1,7 +1,12 @@
+x-env-file: &env-file
+  env_file:
+    - ./.env
+
 services:
   # ============ INFRASTRUCTURE ============
   
   rabbitmq:
+    <<: *env-file
     image: rabbitmq:3.12-management-alpine
     container_name: itv_rabbitmq
     hostname: rabbitmq
@@ -9,9 +14,9 @@ services:
       - "${RABBITMQ_PORT:-5672}:5672"
       - "${RABBITMQ_MGMT_PORT:-15672}:15672"
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-admin123}
-      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-itv_data}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-admin123}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_DEFAULT_VHOST:-itv_data}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
       # - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
@@ -34,15 +39,11 @@ services:
     restart: unless-stopped
 
   postgres:
+    <<: *env-file
     image: postgis/postgis:15-3.4-alpine
     container_name: itv_postgres
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-itv_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-itv_pass123}
-      POSTGRES_DB: ${POSTGRES_DB:-itv_database}
-      PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
@@ -76,6 +77,7 @@ services:
   # ============ APPLICATIONS ============
   
   gateway:
+    <<: *env-file
     build:
       context: .
       dockerfile: apps/gateway/Dockerfile
@@ -84,14 +86,6 @@ services:
       - "${GATEWAY_PORT:-8000}:8000"
     environment:
       APP_NAME: "ITV Gateway Service"
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_PORT: 5672
-      RABBITMQ_USER: ${RABBITMQ_USER:-admin}
-      RABBITMQ_PASS: ${RABBITMQ_PASS:-admin123}
-      RABBITMQ_VHOST: ${RABBITMQ_VHOST:-itv_data}
-      PYTHONUNBUFFERED: 1
-      PYTHONPATH: /app
     volumes:
       - ./apps/gateway:/app/apps/gateway
       - ./core:/app/core
@@ -112,26 +106,18 @@ services:
     restart: unless-stopped
 
   normalizer:
+    <<: *env-file
     build:
       context: .
       dockerfile: apps/normalizer/Dockerfile
     environment:
       APP_NAME: "ITV Normalizer Worker"
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_PORT: 5672
-      RABBITMQ_USER: ${RABBITMQ_USER:-admin}
-      RABBITMQ_PASS: ${RABBITMQ_PASS:-admin123}
-      RABBITMQ_VHOST: ${RABBITMQ_VHOST:-itv_data}
       INPUT_QUEUE: raw_data.itv_stations
       OUTPUT_EXCHANGE: normalized_data
-      PYTHONUNBUFFERED: 1
-      PYTHONPATH: /app
     volumes:
       - ./apps/normalizer:/app/apps/normalizer
       - ./core:/app/core
       - ./domain:/app/domain
-      - ./providers:/app/providers
     networks:
       - itv_network
     deploy:
@@ -148,29 +134,13 @@ services:
     restart: unless-stopped
 
   persister:
+    <<: *env-file
     build:
       context: .
       dockerfile: apps/persister/Dockerfile
     environment:
       APP_NAME: "ITV Persister Worker"
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_PORT: 5672
-      RABBITMQ_USER: ${RABBITMQ_USER:-admin}
-      RABBITMQ_PASS: ${RABBITMQ_PASS:-admin123}
-      RABBITMQ_VHOST: ${RABBITMQ_VHOST:-itv_data}
       INPUT_QUEUE: normalized_data.itv_stations
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      POSTGRES_USER: ${POSTGRES_USER:-itv_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-itv_pass123}
-      POSTGRES_DB: ${POSTGRES_DB:-itv_database}
-      PERSISTER_BATCH_SIZE: ${PERSISTER_BATCH_SIZE:-100}
-      PERSISTER_BATCH_TIMEOUT_MS: ${PERSISTER_BATCH_TIMEOUT_MS:-50}
-      PERSISTER_RETRY_MAX_ATTEMPTS: ${PERSISTER_RETRY_MAX_ATTEMPTS:-3}
-      PERSISTER_RETRY_BASE_DELAY_MS: ${PERSISTER_RETRY_BASE_DELAY_MS:-200}
-      PYTHONUNBUFFERED: 1
-      PYTHONPATH: /app
     volumes:
       - ./apps/persister:/app/apps/persister
       - ./core:/app/core
