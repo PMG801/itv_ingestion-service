@@ -145,13 +145,20 @@ class NormalizerWorker:
             format_lit = cast(Literal["json", "xml", "csv"], data_format)
 
             # Get appropriate transformer for this source
-            transformer = self.factory.create(source)
+            normalization_mode = settings.NORMALIZATION_MODE
+            transformer = self.factory.create(source, normalization_mode=normalization_mode)
 
-            logger.debug(f"Using {transformer.__class__.__name__} for source={source}")
+            logger.debug(
+                f"Using {transformer.__class__.__name__} for source={source} "
+                f"(mode={normalization_mode})"
+            )
 
             # Transform raw data to normalized format.
             # A raw message must represent exactly one station.
             normalized_stations = transformer.transform(payload)
+            fuzzy_metrics = getattr(transformer, "last_metrics", None)
+            if isinstance(fuzzy_metrics, dict):
+                logger.info(f"Fuzzy transform metrics for message {message_id}: {fuzzy_metrics}")
 
             # Publish station-level rejected fragments captured by transformer
             raw_transformer_rejections: object = getattr(transformer, "rejected_items", [])
