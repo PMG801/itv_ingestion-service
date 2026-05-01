@@ -65,8 +65,10 @@ async def test_process_message_transforms_and_publishes_single_station(
 @pytest.mark.asyncio
 async def test_process_message_fails_when_raw_message_contains_multiple_stations(
     normalized_station_payload: dict[str, object],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     worker = NormalizerWorker()
+    monkeypatch.setattr(settings, "NORMALIZATION_MODE", "RULES")
     first_station = _build_station(
         normalized_station_payload, station_id="CAT_BCN-001", raw_id="BCN-001"
     )
@@ -93,8 +95,11 @@ async def test_process_message_fails_when_raw_message_contains_multiple_stations
 
 
 @pytest.mark.asyncio
-async def test_process_message_accepts_empty_transformation_result() -> None:
+async def test_process_message_accepts_empty_transformation_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     worker = NormalizerWorker()
+    monkeypatch.setattr(settings, "NORMALIZATION_MODE", "RULES")
     transformer = Mock(transform=Mock(return_value=[]))
     transformer.rejected_items = []
     worker.factory = Mock(create=Mock(return_value=transformer))
@@ -124,8 +129,10 @@ async def test_process_message_accepts_empty_transformation_result() -> None:
 @pytest.mark.asyncio
 async def test_process_message_publishes_station_level_rejections(
     normalized_station_payload: dict[str, object],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     worker = NormalizerWorker()
+    monkeypatch.setattr(settings, "NORMALIZATION_MODE", "RULES")
     station = _build_station(normalized_station_payload, station_id="GAL_LU-001", raw_id="LU-001")
     transformer = Mock(transform=Mock(return_value=[station]))
     transformer.rejected_items = [
@@ -162,8 +169,11 @@ async def test_process_message_publishes_station_level_rejections(
 
 
 @pytest.mark.asyncio
-async def test_process_message_avoids_duplicate_message_rejection_when_station_rejected() -> None:
+async def test_process_message_avoids_duplicate_message_rejection_when_station_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     worker = NormalizerWorker()
+    monkeypatch.setattr(settings, "NORMALIZATION_MODE", "RULES")
     transformer = Mock(transform=Mock(return_value=[]))
     transformer.rejected_items = [
         {
@@ -211,6 +221,67 @@ async def test_process_message_marks_failure_for_invalid_message() -> None:
 
     assert worker.messages_processed == 0
     assert worker.messages_failed == 1
+
+
+@pytest.mark.asyncio
+async def test_process_message_uses_transform_async_in_llm_mode(
+    normalized_station_payload: dict[str, object],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    worker = NormalizerWorker()
+    monkeypatch.setattr(settings, "NORMALIZATION_MODE", "LLM")
+
+    station = _build_station(normalized_station_payload, station_id="CAT_BCN-001", raw_id="BCN-001")
+    transformer = Mock(transform_async=AsyncMock(return_value=[station]))
+    transformer.rejected_items = []
+    transformer.last_metrics = {
+        "llm_token_usage": 42,
+        "llm_pydantic_validation_errors": 0,
+    }
+
+    worker.factory = Mock(create=Mock(return_value=transformer))
+    worker.publisher = Mock(publish=AsyncMock())
+
+    await worker.process_message(
+        {
+            "message_id": "msg-llm-ok",
+            "source": "catalunya",
+            "payload": {"id": "BCN-001"},
+            "format": "json",
+        }
+    )
+
+    transformer.transform_async.assert_awaited_once()
+    worker.publisher.publish.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_process_message_rejects_message_on_llm_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    worker = NormalizerWorker()
+    monkeypatch.setattr(settings, "NORMALIZATION_MODE", "LLM")
+
+    transformer = Mock(transform_async=AsyncMock(return_value=[]))
+    transformer.rejected_items = [{"reason": "llm_timeout", "raw_fragment": {"id": "BCN-001"}}]
+    transformer.last_metrics = {"llm_last_error_reason": "llm_timeout"}
+
+    worker.factory = Mock(create=Mock(return_value=transformer))
+    worker.publisher = Mock(publish=AsyncMock())
+
+    await worker.process_message(
+        {
+            "message_id": "msg-llm-fail",
+            "source": "catalunya",
+            "payload": {"id": "BCN-001"},
+            "format": "json",
+        }
+    )
+
+    assert worker.publisher.publish.await_count == 2
+    message_level_rejection = worker.publisher.publish.await_args_list[1]
+    assert message_level_rejection.kwargs["exchange_name"] == "rejected_data"
+    assert message_level_rejection.kwargs["message"]["rejection_level"] == "message"
+    assert message_level_rejection.kwargs["message"]["reason"] == "llm_timeout"
+    assert worker.messages_rejected == 1
 
 
 @pytest.mark.asyncio

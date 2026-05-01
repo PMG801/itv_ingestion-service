@@ -54,3 +54,37 @@ Aunque el caso de uso actual es **Estaciones de ITV**, el sistema debe ser **agn
 Todos los servicios tienen límites definidos en `docker-compose.yml`:
 - **Normalizer**: CPU 1.0 (Limit), 0.5 (Reservation) para asegurar rendimiento en transformaciones pesadas.
 - **RabbitMQ/Postgres**: Reservas de 256MB RAM para estabilidad.
+
+## Evolución LLM y Cache (Abril 2026)
+
+### 1) Multi-provider LLM
+- El sistema ya no depende de un único proveedor.
+- Se introdujo una arquitectura plugin con `BaseLLMClient` y factoría de cliente.
+- Proveedores soportados actualmente:
+	- `groq`
+	- `azure_openai`
+	- `github_models` (GitHub Models / Microsoft Foundry)
+- Selección por configuración (`LLM_PROVIDER`) sin cambios en la lógica de negocio.
+
+Notas de autenticación:
+- `github_models` requiere `GITHUB_TOKEN` con permisos `models:read`.
+
+### 2) Cache de reglas por tipo de provincia
+- Se añade `itv.llm_mapping_rules` para persistir reglas de mapeo semántico.
+- Clave de reutilización: `(source_system, province_type)`.
+- Política de versionado: una única regla activa por clave; al generar una nueva, la anterior se desactiva.
+- Beneficio esperado: reducir llamadas repetidas al LLM y estabilizar latencia/coste.
+
+### 3) Estrategias de normalización aisladas
+- Se mantienen separadas las estrategias:
+	- RULES
+	- FUZZY
+	- LLM
+- Objetivo: comparar resultados y métricas sin contaminación entre métodos.
+- Esto habilita conclusiones experimentales trazables para el TFG.
+
+### 4) Operación manual de invalidación
+- Nuevo endpoint de mantenimiento:
+	- `DELETE /api/v1/monitoring/llm-rules/{source_system}/{province_type}`
+- Uso: invalidar regla activa para forzar regeneración en el siguiente batch.
+- Escenario típico: cambio de formato en origen o ajuste de prompt/modelo.

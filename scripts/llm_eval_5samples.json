@@ -1,0 +1,115 @@
+{
+  "executed_at": "2026-04-20T19:02:19.669821+00:00",
+  "samples_per_source": 5,
+  "batch_size": 1,
+  "total_records": 15,
+  "total_valid": 14,
+  "valid_ratio": 0.9333,
+  "rows": [
+    {
+      "source": "catalunya",
+      "record_index": 0,
+      "time_ms": 393.269,
+      "valid": true,
+      "peak_memory_bytes": 860847
+    },
+    {
+      "source": "catalunya",
+      "record_index": 1,
+      "time_ms": 305.048,
+      "valid": true,
+      "peak_memory_bytes": 303196
+    },
+    {
+      "source": "catalunya",
+      "record_index": 2,
+      "time_ms": 306.773,
+      "valid": true,
+      "peak_memory_bytes": 301546
+    },
+    {
+      "source": "catalunya",
+      "record_index": 3,
+      "time_ms": 379.247,
+      "valid": true,
+      "peak_memory_bytes": 301415
+    },
+    {
+      "source": "catalunya",
+      "record_index": 4,
+      "time_ms": 324.477,
+      "valid": true,
+      "peak_memory_bytes": 299993
+    },
+    {
+      "source": "valencia",
+      "record_index": 0,
+      "time_ms": 304.027,
+      "valid": true,
+      "peak_memory_bytes": 298668
+    },
+    {
+      "source": "valencia",
+      "record_index": 1,
+      "time_ms": 297.602,
+      "valid": true,
+      "peak_memory_bytes": 298859
+    },
+    {
+      "source": "valencia",
+      "record_index": 2,
+      "time_ms": 301.588,
+      "valid": true,
+      "peak_memory_bytes": 297477
+    },
+    {
+      "source": "valencia",
+      "record_index": 3,
+      "time_ms": 307.619,
+      "valid": true,
+      "peak_memory_bytes": 296411
+    },
+    {
+      "source": "valencia",
+      "record_index": 4,
+      "time_ms": 292.673,
+      "valid": true,
+      "peak_memory_bytes": 295651
+    },
+    {
+      "source": "galicia",
+      "record_index": 0,
+      "time_ms": 317.902,
+      "valid": true,
+      "peak_memory_bytes": 295794
+    },
+    {
+      "source": "galicia",
+      "record_index": 1,
+      "time_ms": 320.543,
+      "valid": true,
+      "peak_memory_bytes": 344572
+    },
+    {
+      "source": "galicia",
+      "record_index": 2,
+      "time_ms": 332.065,
+      "valid": true,
+      "peak_memory_bytes": 294763
+    },
+    {
+      "source": "galicia",
+      "record_index": 3,
+      "time_ms": 338.786,
+      "valid": true,
+      "peak_memory_bytes": 294890
+    },
+    {
+      "source": "galicia",
+      "record_index": 4,
+      "time_ms": 197.016,
+      "valid": false,
+      "peak_memory_bytes": 295106
+    }
+  ]
+}

@@ -12,7 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
 from core.database import get_async_session
-from core.database.queries import get_ingest_status, get_metrics_aggregation
+from core.database.queries import (
+    get_ingest_status,
+    get_metrics_aggregation,
+    deactivate_llm_mapping_rule_by_key,
+)
 
 router = APIRouter(prefix="/api/v1/monitoring", tags=["monitoring"])
 
@@ -140,3 +144,62 @@ async def truncate_storage_endpoint(
     except Exception as e:
         await session.rollback()
         raise HTTPException(status_code=500, detail=f"Error truncating storage: {str(e)}")
+
+
+@router.delete("/llm-rules/{source_system}/{province_type}")
+async def invalidate_llm_rule_endpoint(
+    source_system: str,
+    province_type: str,
+    session: AsyncSession = Depends(get_async_session),
+) -> dict[str, Any]:
+    """
+    Invalida una regla LLM activa para una combinación source_system + province_type.
+
+    Esto fuerza que el siguiente batch para esa provincia regenere la regla
+    mediante una nueva llamada al LLM en lugar de usar la caché.
+
+    Path Parameters:
+        source_system: Source system identifier (e.g., 'catalunya', 'valencia', 'galicia')
+        province_type: Province type to invalidate (e.g., 'Barcelona', 'Valencia')
+
+    Returns: {
+        "status": "success" | "not_found",
+        "message": "Rule invalidated" | "No active rule found",
+        "deactivated_count": 0 | 1
+    }
+
+    HTTP Status:
+        200: OK - Rule invalidated or not found
+        400: Bad Request - Invalid source_system or province_type
+        500: Internal Server Error
+    """
+    try:
+        if not source_system or not province_type:
+            raise HTTPException(
+                status_code=400,
+                detail="source_system and province_type are required",
+            )
+
+        deactivated_count = await deactivate_llm_mapping_rule_by_key(
+            session, source_system, province_type
+        )
+
+        if deactivated_count == 0:
+            return {
+                "status": "not_found",
+                "message": f"No active rule found for source_system={source_system}, province_type={province_type}",
+                "deactivated_count": 0,
+            }
+
+        return {
+            "status": "success",
+            "message": f"Rule invalidated for source_system={source_system}, province_type={province_type}",
+            "deactivated_count": deactivated_count,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error invalidating LLM rule: {str(e)}",
+        )

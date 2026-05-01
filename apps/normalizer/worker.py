@@ -12,6 +12,7 @@ applies the appropriate transformation strategy, and publishes normalized data.
 import asyncio
 import logging
 import sys
+from time import perf_counter
 from typing import Any, Literal, cast
 from datetime import datetime, timezone
 
@@ -147,6 +148,10 @@ class NormalizerWorker:
             # Get appropriate transformer for this source
             normalization_mode = settings.NORMALIZATION_MODE
             transformer = self.factory.create(source, normalization_mode=normalization_mode)
+            llm_mode = normalization_mode.upper() == "LLM"
+            llm_inference_start_ts: datetime | None = None
+            llm_inference_end_ts: datetime | None = None
+            llm_inference_elapsed_ms: float | None = None
 
             logger.debug(
                 f"Using {transformer.__class__.__name__} for source={source} "
@@ -155,10 +160,35 @@ class NormalizerWorker:
 
             # Transform raw data to normalized format.
             # A raw message must represent exactly one station.
-            normalized_stations = transformer.transform(payload)
-            fuzzy_metrics = getattr(transformer, "last_metrics", None)
-            if isinstance(fuzzy_metrics, dict):
-                logger.info(f"Fuzzy transform metrics for message {message_id}: {fuzzy_metrics}")
+            if llm_mode:
+                llm_inference_start_ts = datetime.now(timezone.utc)
+                llm_perf_start = perf_counter()
+            if llm_mode and hasattr(transformer, "transform_async"):
+                transform_async = getattr(transformer, "transform_async")
+                normalized_stations = await transform_async(payload)
+            else:
+                normalized_stations = transformer.transform(payload)
+            if llm_mode:
+                llm_inference_end_ts = datetime.now(timezone.utc)
+                llm_inference_elapsed_ms = round((perf_counter() - llm_perf_start) * 1000, 3)
+
+            transformer_metrics = getattr(transformer, "last_metrics", None)
+            if isinstance(transformer_metrics, dict):
+                logger.info(
+                    f"Transformer metrics for message {message_id}: {transformer_metrics}"
+                )
+
+            if llm_mode:
+                generated_mapping = getattr(transformer, "last_generated_mapping", None)
+                if generated_mapping is not None:
+                    payload_preview = str(payload)
+                    mapping_preview = str(generated_mapping)
+                    logger.debug(
+                        "LLM mapping preview | message_id=%s | raw_payload=%s | mapped=%s",
+                        message_id,
+                        payload_preview[:1200],
+                        mapping_preview[:1200],
+                    )
 
             # Publish station-level rejected fragments captured by transformer
             raw_transformer_rejections: object = getattr(transformer, "rejected_items", [])
@@ -184,7 +214,22 @@ class NormalizerWorker:
 
             if not normalized_stations:
                 logger.warning(f"⚠️  No stations extracted from message {message_id}")
-                if not transformer_rejections:
+                if llm_mode:
+                    rejection_reason = "llm_transform_failed"
+                    if isinstance(transformer_metrics, dict):
+                        error_reason = transformer_metrics.get("llm_last_error_reason")
+                        if isinstance(error_reason, str) and error_reason:
+                            rejection_reason = error_reason
+                    await self._publish_rejected(
+                        message_id=message_id,
+                        source=source_lit,
+                        data_format=format_lit,
+                        reason=rejection_reason,
+                        rejection_level="message",
+                        raw_payload=payload,
+                    )
+                    self.messages_rejected += 1
+                elif not transformer_rejections:
                     await self._publish_rejected(
                         message_id=message_id,
                         source=source_lit,
@@ -225,6 +270,19 @@ class NormalizerWorker:
                 timing_context["station_sequence"] = station_sequence
             if isinstance(total_stations, int):
                 timing_context["total_stations"] = total_stations
+            if llm_mode and llm_inference_start_ts is not None:
+                timing_context["llm_inference_start"] = llm_inference_start_ts.isoformat()
+            if llm_mode and llm_inference_end_ts is not None:
+                timing_context["llm_inference_end"] = llm_inference_end_ts.isoformat()
+            if llm_mode and llm_inference_elapsed_ms is not None:
+                timing_context["llm_inference_ms"] = llm_inference_elapsed_ms
+            if llm_mode and isinstance(transformer_metrics, dict):
+                llm_pydantic_errors = transformer_metrics.get("llm_pydantic_validation_errors")
+                llm_token_usage = transformer_metrics.get("llm_token_usage")
+                if isinstance(llm_pydantic_errors, int):
+                    timing_context["llm_pydantic_validation_errors"] = llm_pydantic_errors
+                if isinstance(llm_token_usage, int):
+                    timing_context["llm_token_usage"] = llm_token_usage
 
             station_dict["_timing_context"] = timing_context
 

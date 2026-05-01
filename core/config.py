@@ -1,5 +1,6 @@
 """Configuración centralizada de la aplicación usando Pydantic Settings."""
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -34,6 +35,30 @@ class Settings(BaseSettings):
     FUZZY_THRESHOLD_LOW: float = 0.70
     FUZZY_ALGORITHM: str = "jaro_winkler"
 
+    # LLM experiment settings
+    # Supported providers: groq, azure_openai, github_models
+    LLM_PROVIDER: str = "groq"
+    
+    # Groq-specific settings
+    GROQ_API_KEY: str = ""
+    
+    # Azure OpenAI-specific settings
+    AZURE_OPENAI_API_KEY: str = ""
+    AZURE_OPENAI_ENDPOINT: str = ""
+    AZURE_OPENAI_API_VERSION: str = "2024-02-15-preview"
+    AZURE_OPENAI_DEPLOYMENT: str = ""
+
+    # GitHub Models (Foundry) settings
+    GITHUB_TOKEN: str = ""
+    # Optional custom endpoint for GitHub Models (defaults to official Foundry endpoint)
+    GITHUB_MODELS_ENDPOINT: str = "https://models.github.ai/inference"
+    
+    # Common LLM settings
+    LLM_MODEL: str = "llama3-8b-8192"
+    LLM_BATCH_SIZE: int = 5
+    LLM_TEMPERATURE: float = 0.0
+    LLM_REQUEST_TIMEOUT_S: int = 30
+
     # RabbitMQ settings
     RABBITMQ_HOST: str = "rabbitmq"
     RABBITMQ_PORT: int = 5672
@@ -57,6 +82,38 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", case_sensitive=True, extra="ignore"
     )
+
+    @field_validator("LLM_PROVIDER")
+    @classmethod
+    def validate_llm_provider(cls, value: str) -> str:
+        """Allow approved remote LLM providers for this experiment."""
+        normalized = value.strip().lower()
+        allowed_providers = ("groq", "azure_openai", "github_models")
+        if normalized not in allowed_providers:
+            raise ValueError(
+                f"Unsupported LLM provider '{value}'. Allowed providers: {', '.join(allowed_providers)}"
+            )
+        return normalized
+
+    @field_validator("LLM_MODEL")
+    @classmethod
+    def block_local_model_backends(cls, value: str) -> str:
+        """Explicitly block local LLM backends in model/provider strings."""
+        normalized = value.strip().lower()
+        forbidden_fragments = ("ollama", "llama.cpp", "llamacpp", "vllm", "localhost")
+        if any(fragment in normalized for fragment in forbidden_fragments):
+            raise ValueError(
+                "Local LLM backends are forbidden for this experiment (4GB RAM safety limit)."
+            )
+        return value
+
+    @field_validator("LLM_REQUEST_TIMEOUT_S")
+    @classmethod
+    def validate_llm_timeout(cls, value: int) -> int:
+        """Cap timeout at 30 seconds to avoid hanging workers."""
+        if value <= 0 or value > 30:
+            raise ValueError("LLM_REQUEST_TIMEOUT_S must be between 1 and 30 seconds")
+        return value
 
     @property
     def RABBITMQ_URL(self) -> str:

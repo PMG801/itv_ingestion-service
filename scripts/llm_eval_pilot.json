@@ -1,0 +1,31 @@
+{
+  "executed_at": "2026-04-20T18:53:20.481102+00:00",
+  "samples_per_source": 1,
+  "batch_size": 1,
+  "total_records": 3,
+  "total_valid": 0,
+  "valid_ratio": 0.0,
+  "rows": [
+    {
+      "source": "catalunya",
+      "record_index": 0,
+      "time_ms": 191.112,
+      "valid": false,
+      "peak_memory_bytes": 860786
+    },
+    {
+      "source": "valencia",
+      "record_index": 0,
+      "time_ms": 155.199,
+      "valid": false,
+      "peak_memory_bytes": 301549
+    },
+    {
+      "source": "galicia",
+      "record_index": 0,
+      "time_ms": 176.984,
+      "valid": false,
+      "peak_memory_bytes": 300237
+    }
+  ]
+}

@@ -7,6 +7,7 @@ from core.config import settings
 from domain.itv_stations.transformers.base import BaseTransformer
 from domain.itv_stations.transformers.catalunya import CatalunyaTransformer
 from domain.itv_stations.transformers.fuzzy import FuzzyTransformer
+from domain.itv_stations.transformers.llm_transformer import LLMTransformer
 
 
 class DummyTransformer(BaseTransformer):
@@ -100,3 +101,12 @@ def test_factory_rejects_invalid_normalization_mode(monkeypatch: pytest.MonkeyPa
 
     with pytest.raises(ValueError, match="Unsupported normalization mode"):
         TransformerFactory.create("catalunya")
+
+
+def test_factory_creates_llm_transformer_when_mode_is_llm(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "NORMALIZATION_MODE", "LLM")
+
+    transformer = TransformerFactory.create("catalunya")
+
+    assert isinstance(transformer, LLMTransformer)
+    assert transformer.source_system == "catalunya"

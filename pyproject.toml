@@ -17,6 +17,8 @@ dependencies = [
     
     # Async Support
     "aiohttp==3.9.1",
+    "httpx==0.26.0",
+    "azure-ai-inference==1.0.0b9",
     
     # Message Broker
     "aio-pika==9.3.1",
