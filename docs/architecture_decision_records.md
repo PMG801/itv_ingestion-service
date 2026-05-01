@@ -2,7 +2,7 @@
 
 **Estado:** Aceptado
 **Contexto:** El sistema inicialmente usaba Groq como único proveedor LLM. Se requería flexibilidad para soportar múltiples proveedores (Azure OpenAI, AWS Bedrock, etc.) sin cambios en el código de transformación.
-**Decisión:** Implementar una arquitectura basada en plugins con una clase base abstracta `BaseLLMClient` y subclases concretas (`GroqClient`, `AzureOpenAIClient`, etc.). El patrón Factory (`LLMClientFactory`) selecciona la implementación correcta basándose en la configuración (`settings.LLM_PROVIDER`).
+**Decisión:** Implementar una arquitectura basada en plugins con una clase base abstracta `BaseLLMClient` y subclases concretas (`GroqClient`, `GitHubModelsClient`, etc.). El patrón Factory (`LLMClientFactory`) selecciona la implementación correcta basándose en la configuración (`settings.LLM_PROVIDER`).
 **Consecuencias:**
 - (+) Soporta múltiples proveedores sin cambiar lógica de transformación.
 - (+) Facilita testing con mocks de clientes LLM.

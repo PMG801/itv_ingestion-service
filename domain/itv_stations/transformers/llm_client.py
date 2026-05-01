@@ -1,4 +1,4 @@
-"""LLM client abstraction with support for multiple providers (Groq, Azure OpenAI)."""
+"""LLM client abstraction with support for multiple providers (Groq, GitHub Models)."""
 
 from __future__ import annotations
 
@@ -9,10 +9,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from azure.ai.inference import ChatCompletionsClient
-from azure.ai.inference.models import SystemMessage, UserMessage
-from azure.core.credentials import AzureKeyCredential
-from azure.core.exceptions import HttpResponseError, ServiceRequestError
 import httpx
 
 from core.config import settings
@@ -264,97 +260,6 @@ class GroqClient(BaseLLMClient):
         return parsed, usage
 
 
-class AzureOpenAIClient(BaseLLMClient):
-    """Azure OpenAI client for semantic mapping with strict JSON-only responses."""
-
-    def __init__(self) -> None:
-        self._api_key = settings.AZURE_OPENAI_API_KEY.strip()
-        self._endpoint = settings.AZURE_OPENAI_ENDPOINT.rstrip("/").strip()
-        self._api_version = settings.AZURE_OPENAI_API_VERSION.strip()
-        self._deployment = settings.AZURE_OPENAI_DEPLOYMENT.strip()
-        self._model = settings.LLM_MODEL
-        self._temperature = float(settings.LLM_TEMPERATURE)
-        self._timeout = float(settings.LLM_REQUEST_TIMEOUT_S)
-
-        if not self._api_key:
-            raise LLMClientError("Missing AZURE_OPENAI_API_KEY", reason="llm_missing_api_key")
-        if not self._endpoint:
-            raise LLMClientError("Missing AZURE_OPENAI_ENDPOINT", reason="llm_missing_config")
-        if not self._deployment:
-            raise LLMClientError("Missing AZURE_OPENAI_DEPLOYMENT", reason="llm_missing_config")
-
-    async def get_normalized_mapping(
-        self,
-        *,
-        source_system: str,
-        minified_payloads: Sequence[str],
-    ) -> tuple[list[dict[str, Any]], LLMUsage]:
-        """Request semantic mapping and return strict JSON array plus usage."""
-        if not minified_payloads:
-            return [], LLMUsage()
-
-        system_prompt = self._build_system_prompt(source_system)
-        user_prompt = self._build_user_prompt(minified_payloads)
-
-        request_payload: dict[str, Any] = {
-            "model": self._model,
-            "temperature": self._temperature,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-        }
-
-        # Azure OpenAI requires deployment name in URL path
-        url = (
-            f"{self._endpoint}/openai/deployments/{self._deployment}/"
-            f"chat/completions?api-version={self._api_version}"
-        )
-
-        headers = {
-            "api-key": self._api_key,
-            "Content-Type": "application/json",
-        }
-
-        try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
-                response = await client.post(
-                    url,
-                    headers=headers,
-                    json=request_payload,
-                )
-        except httpx.TimeoutException as exc:
-            raise LLMTimeoutError(
-                f"Azure OpenAI request timed out after {self._timeout:.0f}s",
-                reason="llm_timeout",
-            ) from exc
-        except httpx.RequestError as exc:
-            raise LLMHTTPError(
-                f"Azure OpenAI request failed: {exc}",
-                reason="llm_http_error",
-            ) from exc
-
-        if response.status_code == 429:
-            raise LLMRateLimitError(
-                "Azure OpenAI rate limit exceeded",
-                reason="llm_rate_limited",
-                http_status=429,
-            )
-        if response.status_code >= 400:
-            raise LLMHTTPError(
-                f"Azure OpenAI HTTP {response.status_code}: {response.text[:400]}",
-                reason="llm_http_error",
-                http_status=response.status_code,
-                response_detail=response.text[:500],
-            )
-
-        body = response.json()
-        content = self._extract_content(body)
-        parsed = self._parse_strict_json_array(content)
-        usage = self._extract_usage(body)
-        return parsed, usage
-
-
 class GitHubModelsClient(BaseLLMClient):
     """GitHub Models client (Foundry) for semantic mapping with strict JSON-only responses."""
 
@@ -454,7 +359,7 @@ class LLMClientFactory:
         """Create LLM client based on LLM_PROVIDER setting.
 
         Returns:
-            BaseLLMClient: Groq or Azure OpenAI client.
+            BaseLLMClient: Groq or GitHub Models client.
 
         Raises:
             ValueError: If provider is not supported or configuration is missing.
@@ -463,8 +368,6 @@ class LLMClientFactory:
 
         if provider == "groq":
             return GroqClient()
-        elif provider == "azure_openai":
-            return AzureOpenAIClient()
         elif provider == "github_models":
             return GitHubModelsClient()
         else:
@@ -504,7 +407,6 @@ __all__ = [
     "LLMInvalidJSONError",
     "BaseLLMClient",
     "GroqClient",
-    "AzureOpenAIClient",
     "GitHubModelsClient",
     "LLMClientFactory",
     "get_llm_client",

@@ -160,59 +160,7 @@ LLM_REQUEST_TIMEOUT_S=30
 NORMALIZATION_MODE=LLM
 ```
 
-#### Opción 2: Azure OpenAI (Recomendado para producción)
-```bash
-LLM_PROVIDER=azure_openai
-AZURE_OPENAI_API_KEY=your-azure-api-key
-AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
-AZURE_OPENAI_DEPLOYMENT=your-deployment-name
-AZURE_OPENAI_API_VERSION=2024-02-15-preview
-LLM_BATCH_SIZE=5
-LLM_TEMPERATURE=0.0
-LLM_REQUEST_TIMEOUT_S=30
-NORMALIZATION_MODE=LLM
-```
-
-**Obtener credenciales Azure OpenAI:**
-1. Crear instancia en Azure Portal: https://portal.azure.com/
-2. Navegar a "Azure OpenAI" > Create Resource
-3. Ir a "Keys and Endpoint" en la instancia creada
-4. Copiar API Key y Endpoint
-5. Desplegar modelo (e.g., gpt-4) - anotar nombre de deployment
-6. Encontrar API version en documentación: https://learn.microsoft.com/en-us/azure/ai-services/openai/reference
-
-**Ventajas Azure OpenAI vs Groq:**
-- Latencia más baja (< 200ms vs ~500ms Groq)
-- Modelos más actualizados (GPT-4 Turbo disponible)
-- SLA de producción garantizado
-- Integración con VPN corporativo
-- Region local (soberanía de datos)
-
-**Restricciones del experimento:**
-- El contenedor `normalizer` necesita salida a internet (API endpoints).
-- Se prohíbe explícitamente la carga de modelos locales (Ollama/Llama.cpp/vLLM/localhost) para proteger recursos (4GB RAM) y la estabilidad de RabbitMQ/PostgreSQL.
-- El timeout de red está limitado a 30 segundos para evitar workers colgados.
-
-#### Migration de Groq a Azure OpenAI
-
-**Paso 1: Actualizar configuración**
-```bash
-# En .env, cambiar de:
-LLM_PROVIDER=groq
-# A:
-LLM_PROVIDER=azure_openai
-AZURE_OPENAI_API_KEY=...
-# Remover: GROQ_API_KEY (opcional, se ignora)
-```
-
-**Paso 2: Reiniciar servicios**
-```bash
-docker-compose restart normalizer persister
-```
-
-**Paso 3: Invalidar caché de reglas** (opcional)
-```bash
-# Forzar regeneración de todas las reglas en siguiente batch:
+Para más detalles de configuración y opciones avanzadas, consulta la sección de entorno en [docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md).
 curl -X DELETE http://localhost:8000/api/v1/monitoring/llm-rules/{source_system}/{province_type}
 ```
 

@@ -27,7 +27,6 @@ E2E Flow Test:                                        2/2 ✅
 #### ✅ FASE A: Provider Abstraction
 - [x] `BaseLLMClient` abstract class con interfaz unificada
 - [x] `GroqClient` implementación concreta
-- [x] `AzureOpenAIClient` implementación concreta
 - [x] `LLMClientFactory` para inyección de dependencia
 - [x] Validación en `core/config.py` con Pydantic
 - [x] Backward compatibility: `get_normalized_mapping()` wrapper
@@ -60,37 +59,12 @@ E2E Flow Test:                                        2/2 ✅
 - [x] ADR 003: Plugin Architecture para Proveedores LLM
 - [x] ADR 004: Cache de Reglas por Tipo de Provincia
 - [x] ADR 005: Aislamiento de Métodos de Normalización
-- [x] README.md actualizado: Azure OpenAI setup + migration guide
 - [x] .env.example con todas las nuevas variables
 - [x] PROJECT_CONTEXT.md con sección "Evolución LLM y Cache"
 
----
-
 ## 🚀 Cambios de Configuración Requeridos
 
-### En tu .env actual, corregir:
-
-```bash
-# ❌ INCORRECTO (lo que viste)
-AZURE_OPENAI_API_VERSION=gpt-4o-mini    # ← ESTO ES EL MODELO, NO LA VERSIÓN
-
-# ✅ CORRECTO
-AZURE_OPENAI_API_VERSION=2024-02-15-preview   # ← Esto es la API version
-
-# También verificar:
-LLM_PROVIDER=azure_openai              # Cambiar de groq si queremos Azure
-AZURE_OPENAI_DEPLOYMENT=itv-model      # El nombre del deployment que creaste en Azure
-```
-
-### Variables nuevas en .env (ver .env.example):
-```bash
-AZURE_OPENAI_API_KEY=...               # Tu Azure OpenAI API key
-AZURE_OPENAI_ENDPOINT=https://...      # Tu endpoint de Azure
-AZURE_OPENAI_API_VERSION=2024-02-15-preview
-AZURE_OPENAI_DEPLOYMENT=tu-deployment
-
-LLM_PROVIDER=azure_openai              # Seleccionar proveedor
-```
+Ver [docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md) para la configuración de LLM_PROVIDER (soportados: `groq`, `github_models`).
 
 ---
 
@@ -122,8 +96,6 @@ Normalizer.consume() → LLMTransformer.transform_batch_async()
 
 ### Paso 1: Actualizar Credenciales (URGENTE)
 - [ ] Rotar GROQ_API_KEY (ya comprometida en repo)
-- [ ] Rotar AZURE_OPENAI_API_KEY (ya comprometida en repo)
-- [ ] Generar nuevas en Azure/Groq console
 - [ ] Actualizar .env con nuevas claves
 
 ### Paso 2: Ejecutar Migración
@@ -177,7 +149,6 @@ Asumiendo:
 - 1000 ingestiones/día en ITV
 - 80% de las mismas 3-4 provincias
 - Groq: $0.02 / 1M tokens (~$0.00001 por llamada)
-- Azure OpenAI: $0.01 / 1K tokens (~$0.001 por llamada)
 
 **Ahorro mensual esperado:** 60-75% en costos LLM
 
@@ -186,7 +157,7 @@ Asumiendo:
 ## 📝 Archivos Modificados/Creados
 
 ### Core Implementation
-- [core/config.py](core/config.py#L1) - Extended with Azure OpenAI config
+- [core/config.py](core/config.py#L1) - LLM configuration
 - [domain/itv_stations/transformers/llm_client.py](domain/itv_stations/transformers/llm_client.py#L1) - Multi-provider architecture
 - [domain/itv_stations/transformers/llm_transformer.py](domain/itv_stations/transformers/llm_transformer.py#L1) - Cache integration
 - [domain/itv_stations/models.py](domain/itv_stations/models.py#L1) - LLMMappingRule ORM model
@@ -202,7 +173,6 @@ Asumiendo:
 ### Documentation
 - [docs/architecture_decision_records.md](docs/architecture_decision_records.md#L1) - 3 new ADRs (003-005)
 - [docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md#L58) - Evolution section
-- [README.md](README.md#L148) - Azure OpenAI guide + migration steps
 - [.env.example](.env.example#L1) - Complete configuration template
 
 ---

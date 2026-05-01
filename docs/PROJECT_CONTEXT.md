@@ -62,7 +62,6 @@ Todos los servicios tienen límites definidos en `docker-compose.yml`:
 - Se introdujo una arquitectura plugin con `BaseLLMClient` y factoría de cliente.
 - Proveedores soportados actualmente:
 	- `groq`
-	- `azure_openai`
 	- `github_models` (GitHub Models / Microsoft Foundry)
 - Selección por configuración (`LLM_PROVIDER`) sin cambios en la lógica de negocio.
 
