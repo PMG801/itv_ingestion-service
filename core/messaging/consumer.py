@@ -136,6 +136,45 @@ class RabbitMQConsumer:
             logger.error(f"Error consuming from queue {queue_name}: {e}", exc_info=True)
             raise
 
+    async def consume_raw(
+        self,
+        queue_name: str,
+        callback: Callable[[AbstractIncomingMessage, dict[str, Any]], Awaitable[None]],
+        auto_ack: bool = False,
+        arguments: dict[str, Any] | None = None,
+    ) -> None:
+        """
+        Start consuming messages from a queue with manual ack control.
+
+        The callback receives both the raw message and the deserialized payload.
+        When auto_ack is False, the callback is responsible for ack/reject.
+        """
+        if self.channel is None:
+            raise RuntimeError("Consumer not connected. Call connect() first.")
+        channel = self.channel
+
+        try:
+            queue = await channel.declare_queue(
+                queue_name,
+                durable=True,
+                arguments=arguments,
+            )
+
+            logger.info(f"Starting to consume from queue: {queue_name}")
+
+            async with queue.iterator() as queue_iter:
+                message: AbstractIncomingMessage
+                async for message in queue_iter:
+                    await self._process_raw_message(
+                        message=message,
+                        callback=callback,
+                        auto_ack=auto_ack,
+                    )
+
+        except Exception as e:
+            logger.error(f"Error consuming from queue {queue_name}: {e}", exc_info=True)
+            raise
+
     async def _process_message(
         self,
         message: AbstractIncomingMessage,
@@ -174,6 +213,44 @@ class RabbitMQConsumer:
             logger.error(f"Failed to decode message JSON: {e}")
             # Reject message and send to DLQ (don't requeue)
             await message.reject(requeue=False)
+
+    async def _process_raw_message(
+        self,
+        message: AbstractIncomingMessage,
+        callback: Callable[[AbstractIncomingMessage, dict[str, Any]], Awaitable[None]],
+        auto_ack: bool,
+    ) -> None:
+        """
+        Process a single message and pass raw message to callback.
+
+        Args:
+            message: Incoming RabbitMQ message.
+            callback: Function to process the message.
+            auto_ack: Whether to auto-acknowledge messages.
+        """
+        try:
+            payload = json.loads(message.body.decode("utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError("RabbitMQ message payload must be a JSON object")
+
+            logger.debug(
+                f"Received message: {payload.get('message_id', 'unknown')} "
+                f"from {payload.get('source', 'unknown')}"
+            )
+
+            await callback(message, payload)
+
+            if auto_ack:
+                await message.ack()
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to decode message JSON: {e}")
+            await message.reject(requeue=False)
+
+        except Exception as e:
+            logger.error(f"Error processing message: {e}", exc_info=True)
+            if not auto_ack:
+                await message.reject(requeue=False)
 
         except Exception as e:
             logger.error(f"Error processing message: {e}", exc_info=True)

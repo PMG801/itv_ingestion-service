@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     LLM_BATCH_SIZE: int = 5
     LLM_TEMPERATURE: float = 0.0
     LLM_REQUEST_TIMEOUT_S: int = 30
+    LLM_NORMALIZER_BATCH_SIZE: int = 5
+    LLM_NORMALIZER_BATCH_TIMEOUT_MS: int = 500
+    LLM_GITHUB_MODELS_MIN_DELAY_MS: int = 4000
+    LLM_GROQ_MIN_DELAY_MS: int = 2000
 
     # RabbitMQ settings
     RABBITMQ_HOST: str = "rabbitmq"

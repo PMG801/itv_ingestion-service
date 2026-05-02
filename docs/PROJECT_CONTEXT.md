@@ -87,3 +87,8 @@ Notas de autenticación:
 	- `DELETE /api/v1/monitoring/llm-rules/{source_system}/{province_type}`
 - Uso: invalidar regla activa para forzar regeneración en el siguiente batch.
 - Escenario típico: cambio de formato en origen o ajuste de prompt/modelo.
+
+### 5) Restriccion de instancia unica (limites LLM)
+- GitHub Models limita a 15 requests/min y 5 concurrentes.
+- El normalizer aplica batching por cola y un retraso minimo entre peticiones.
+- Este modo asume 1 instancia del normalizer; escalar horizontalmente requiere un coordinador global de rate limit.

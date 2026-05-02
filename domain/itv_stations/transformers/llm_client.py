@@ -10,12 +10,19 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx
+from azure.ai.inference import ChatCompletionsClient
+from azure.ai.inference.models import SystemMessage, UserMessage
+from azure.core.credentials import AzureKeyCredential
+from azure.core.exceptions import HttpResponseError, ServiceRequestError
 
 from core.config import settings
+from core.messaging.rate_limiter import RateLimiter
 
 # Free-tier safety: serialize outbound LLM requests to reduce 429 errors.
 _GROQ_RATE_LIMIT_SEMAPHORE = asyncio.Semaphore(1)
 _GITHUB_MODELS_RATE_LIMIT_SEMAPHORE = asyncio.Semaphore(1)
+_GROQ_RATE_LIMITER = RateLimiter(settings.LLM_GROQ_MIN_DELAY_MS)
+_GITHUB_MODELS_RATE_LIMITER = RateLimiter(settings.LLM_GITHUB_MODELS_MIN_DELAY_MS)
 
 
 @dataclass(slots=True)
@@ -221,6 +228,7 @@ class GroqClient(BaseLLMClient):
         }
 
         async with _GROQ_RATE_LIMIT_SEMAPHORE:
+            await _GROQ_RATE_LIMITER.wait()
             try:
                 async with httpx.AsyncClient(timeout=self._timeout) as client:
                     response = await client.post(
@@ -295,6 +303,7 @@ class GitHubModelsClient(BaseLLMClient):
             while attempt < max_attempts:
                 attempt += 1
                 try:
+                    await _GITHUB_MODELS_RATE_LIMITER.wait()
                     client = ChatCompletionsClient(
                         endpoint=self._base_url,
                         credential=AzureKeyCredential(self._token),
