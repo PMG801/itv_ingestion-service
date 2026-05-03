@@ -63,6 +63,8 @@ class Settings(BaseSettings):
     RABBITMQ_USER: str = "admin"
     RABBITMQ_PASS: str = "admin123"
     RABBITMQ_VHOST: str = "itv_data"
+    # Per-channel prefetch (max unacknowledged messages delivered to consumer)
+    RABBITMQ_PREFETCH: int = 10
 
     # PostgreSQL settings
     POSTGRES_HOST: str = "postgres"

@@ -58,8 +58,18 @@ class RabbitMQConsumer:
             # Open channel
             self.channel = await self.connection.channel()
 
-            # Set QoS (prefetch count) - process N messages at a time
-            await self.channel.set_qos(prefetch_count=10)
+            # Determine QoS (prefetch count) - process N messages at a time
+            prefetch_count = getattr(settings, "RABBITMQ_PREFETCH", 10)
+            try:
+                if getattr(settings, "NORMALIZATION_MODE", "").upper() == "LLM":
+                    # Align RabbitMQ prefetch with the LLM normalizer batch size
+                    prefetch_count = int(getattr(settings, "LLM_NORMALIZER_BATCH_SIZE", prefetch_count))
+            except Exception:
+                # Fall back to configured/default prefetch_count on any error
+                prefetch_count = int(prefetch_count)
+
+            await self.channel.set_qos(prefetch_count=prefetch_count)
+            logger.info(f"Consumer channel QoS set: prefetch_count={prefetch_count}")
 
             logger.info("Consumer connected to RabbitMQ successfully")
 
@@ -214,6 +224,11 @@ class RabbitMQConsumer:
             # Reject message and send to DLQ (don't requeue)
             await message.reject(requeue=False)
 
+        except Exception as e:
+            logger.error(f"Error processing message: {e}", exc_info=True)
+            # Reject message and send to DLQ (don't requeue)
+            await message.reject(requeue=False)
+
     async def _process_raw_message(
         self,
         message: AbstractIncomingMessage,
@@ -240,7 +255,7 @@ class RabbitMQConsumer:
 
             await callback(message, payload)
 
-            if auto_ack:
+            if not auto_ack:
                 await message.ack()
 
         except json.JSONDecodeError as e:
@@ -251,11 +266,6 @@ class RabbitMQConsumer:
             logger.error(f"Error processing message: {e}", exc_info=True)
             if not auto_ack:
                 await message.reject(requeue=False)
-
-        except Exception as e:
-            logger.error(f"Error processing message: {e}", exc_info=True)
-            # Reject message and send to DLQ (don't requeue)
-            await message.reject(requeue=False)
 
     async def disconnect(self) -> None:
         """
