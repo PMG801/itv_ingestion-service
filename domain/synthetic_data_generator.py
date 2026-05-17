@@ -366,5 +366,258 @@ class SyntheticDataGenerator:
             raise ValueError(f"Formato no soportado: {format_type}")
 
 
+class InvalidSyntheticDataGenerator:
+    """
+    Generador de datos sintéticos INVÁLIDOS para testing de validaciones.
+
+    Genera estaciones ITV que intencionalmente fallan en validaciones Pydantic
+    y/o reglas de negocio, permitiendo testing de rejection logic.
+
+    Error types soportados:
+    - 'invalid_postal_code': código postal que no coincide provincia (ej: 99999 para Barcelona)
+    - 'invalid_province': provincia inexistente en España ("NARNIA", "ATLANTIS")
+    - 'coordinates_outside_spain': latitud/longitud fuera de límites españoles
+    - 'coordinates_outside_province': coordenadas dentro España pero fuera de provincia especificada
+    - 'invalid_email': email malformado ("not-an-email", "@@@user.com", etc.)
+    - 'missing_contact_fields': sin teléfono, email, dirección, ciudad, provincia, postal
+    - 'oversized_name': nombre > 200 caracteres
+    - 'undersized_station_id': station_id < 3 caracteres
+    - 'malformed_coordinates': latitud/longitud NaN o no numéricos
+    - 'invalid_city_not_in_province': ciudad válida pero no en provincia asignada
+    """
+
+    SOURCES = {
+        "catalunya": {"prefix": "CAT", "region": "Catalonia"},
+        "valencia": {"prefix": "VAL", "region": "Valencia"},
+        "galicia": {"prefix": "GAL", "region": "Galicia"},
+    }
+
+    # Provincias españolas inexistentes para generar errores
+    INVALID_PROVINCES = ["NARNIA", "ATLANTIS", "MORDOR", "WINTERFELL", "GOTHAM"]
+
+    # Coordenadas fuera de España (aproximadamente)
+    OUTSIDE_SPAIN_COORDS = [
+        (52.5, 13.4),    # Berlín
+        (48.8, 2.3),     # París
+        (51.5, -0.1),    # Londres
+        (-33.9, 18.4),   # Ciudad del Cabo
+        (35.7, 139.7),   # Tokio
+    ]
+
+    # Ciudades que no pertenecen a provincias específicas
+    CITY_PROVINCE_MISMATCH = {
+        "BARCELONA": ["VALENCIA", "SEVILLA", "MADRID"],
+        "VALENCIA": ["BARCELONA", "BILBAO", "TOLEDO"],
+        "GALICIA": ["MADRID", "SEVILLA", "VALENCIA"],
+    }
+
+    @classmethod
+    def generate_invalid_stations(
+        cls,
+        source: Literal["catalunya", "valencia", "galicia"],
+        count: int = 10,
+        error_types: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        """
+        Genera un lote de estaciones ITV inválidas.
+
+        Args:
+            source: Fuente ('catalunya', 'valencia', 'galicia')
+            count: Número de estaciones inválidas a generar
+            error_types: Lista específica de tipos de error a inyectar
+                Si None, selecciona aleatoriamente de todos los tipos disponibles.
+
+        Returns:
+            Payload con estaciones inválidas en formato específico por región:
+            - Catalunya: dict con clave "stations"
+            - Valencia: dict con clave "estaciones"
+            - Galicia: dict con clave "stations"
+        """
+        if source not in cls.SOURCES:
+            raise ValueError(f"Fuente inválida: {source}. Usar: {list(cls.SOURCES.keys())}")
+
+        # Tipos de error disponibles
+        available_error_types = [
+            "invalid_postal_code",
+            "invalid_province",
+            "coordinates_outside_spain",
+            "coordinates_outside_province",
+            "invalid_email",
+            "missing_contact_fields",
+            "oversized_name",
+            "undersized_station_id",
+            "malformed_coordinates",
+            "invalid_city_not_in_province",
+        ]
+
+        # Si no se especificaron tipos, usar todos
+        if error_types is None:
+            error_types = available_error_types
+        else:
+            # Validar que todos los tipos especificados sean válidos
+            invalid_types = [et for et in error_types if et not in available_error_types]
+            if invalid_types:
+                raise ValueError(
+                    f"Invalid error types: {invalid_types}. "
+                    f"Available: {available_error_types}"
+                )
+
+        stations = []
+        for i in range(count):
+            # Seleccionar tipo de error (aleatorio de los disponibles)
+            selected_error_type = random.choice(error_types)
+            station = cls._generate_single_invalid_station(
+                source, i + 1, selected_error_type
+            )
+            stations.append(station)
+
+        # Envolver con la clave correcta según la fuente
+        if source == "valencia":
+            return {"estaciones": stations}
+        else:
+            return {"stations": stations}
+
+    @classmethod
+    def _generate_single_invalid_station(
+        cls,
+        source: Literal["catalunya", "valencia", "galicia"],
+        index: int,
+        error_type: str,
+    ) -> dict[str, Any]:
+        """
+        Genera una estación ITV individual con un error intencional específico.
+
+        Args:
+            source: Fuente de datos
+            index: Índice de estación en el lote
+            error_type: Tipo de error a inyectar
+
+        Returns:
+            Estación con error en formato específico por región
+        """
+        source_info = cls.SOURCES[source]
+        prefix = source_info["prefix"]
+
+        # Datos base válidos (que luego modificaremos según error_type)
+        provinces = SyntheticDataGenerator.REGION_PROVINCES.get(source, ["BARCELONA"])
+        province = random.choice(provinces)
+
+        station_id = f"{prefix}-{index:06d}"
+        city = SyntheticDataGenerator._get_city_for_province(source, province)
+        name = f"ITV Invalid {city} - {index:04d}"
+        latitude, longitude = SyntheticDataGenerator._get_coordinates_for_province(
+            source, province
+        )
+        phone = Faker("es_ES").phone_number()[:15]
+        email = Faker("es_ES").email()
+        address = Faker("es_ES").street_address()
+        postal_prefix = SyntheticDataGenerator._get_postal_code_prefix(province)
+        postal_code = f"{postal_prefix}{random.randint(0, 999):03d}"
+
+        # Inyectar error específico
+        if error_type == "invalid_postal_code":
+            # Código postal que no coincide la provincia
+            postal_code = "99999"
+
+        elif error_type == "invalid_province":
+            # Provincia inexistente
+            province = random.choice(cls.INVALID_PROVINCES)
+
+        elif error_type == "coordinates_outside_spain":
+            # Coordenadas fuera de España
+            latitude, longitude = random.choice(cls.OUTSIDE_SPAIN_COORDS)
+
+        elif error_type == "coordinates_outside_province":
+            # Coordenadas dentro España pero fuera de la provincia asignada
+            # Usar coordenadas de una provincia diferente
+            other_provinces = [p for p in PROVINCE_COORDS_RANGE.keys() if p != province]
+            if other_provinces:
+                other_province = random.choice(other_provinces)
+                bounds = PROVINCE_COORDS_RANGE[other_province]
+                latitude = round(random.uniform(*bounds["lat"]), 4)
+                longitude = round(random.uniform(*bounds["lon"]), 4)
+
+        elif error_type == "invalid_email":
+            # Email malformado
+            invalid_emails = ["not-an-email", "@@@", "user@", "user@@example.com", ""]
+            email = random.choice(invalid_emails)
+
+        elif error_type == "missing_contact_fields":
+            # Sin teléfono, sin email, sin dirección, etc.
+            phone = None
+            email = None
+            address = None
+            city = None
+            province = None
+            postal_code = None
+
+        elif error_type == "oversized_name":
+            # Nombre > 200 caracteres
+            name = "X" * 250
+
+        elif error_type == "undersized_station_id":
+            # station_id < 3 caracteres
+            station_id = "XX"
+
+        elif error_type == "malformed_coordinates":
+            # Coordenadas no numéricas (NaN, strings, etc.)
+            latitude = float("nan")
+            longitude = float("nan")
+
+        elif error_type == "invalid_city_not_in_province":
+            # Ciudad válida pero de otra provincia
+            # Ej: Barcelona ciudad pero en provincia de Valencia
+            city = random.choice(
+                SyntheticDataGenerator.PROVINCE_CITIES.get(source, {}).get(province, ["MADRID"])
+            )
+            # Cambiar provincia pero mantener ciudad (mismatch intencional)
+            other_provinces = [p for p in provinces if p != province]
+            if other_provinces:
+                province = random.choice(other_provinces)
+
+        # Generar datos en formato específico por región
+        if source == "catalunya":
+            station_data = {
+                "id": station_id,
+                "nom": name,
+                "adreca": address,
+                "ciutat": city.upper() if city else None,
+                "provincia": province,
+                "codi_postal": postal_code,
+                "latitud": latitude,
+                "longitud": longitude,
+                "telefon": phone,
+                "email": email,
+            }
+        elif source == "valencia":
+            station_data = {
+                "codigo": station_id,
+                "nombre": name,
+                "direccion": address,
+                "poblacion": city.upper() if city else None,
+                "provincia": province,
+                "codigo_postal": postal_code,
+                "latitud": latitude,
+                "longitud": longitude,
+                "telefono": phone,
+                "correo": email,
+            }
+        else:  # galicia
+            station_data = {
+                "id": station_id,
+                "nome": name,
+                "enderezo": address,
+                "concello": city.upper() if city else None,
+                "provincia": province,
+                "cp": postal_code,
+                "lat": latitude,
+                "lon": longitude,
+                "telefono": phone,
+                "email": email,
+            }
+
+        return station_data
+
+
 # Export para uso directo
-__all__ = ["SyntheticDataGenerator"]
+__all__ = ["SyntheticDataGenerator", "InvalidSyntheticDataGenerator"]

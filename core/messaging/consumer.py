@@ -256,16 +256,43 @@ class RabbitMQConsumer:
             await callback(message, payload)
 
             if not auto_ack:
-                await message.ack()
+                try:
+                    await message.ack()
+                except aio_pika.exceptions.MessageProcessError:
+                    logger.warning(
+                        f"Message {payload.get('message_id', 'unknown')} "
+                        "already processed (ack failed) - likely redelivered"
+                    )
 
         except json.JSONDecodeError as e:
             logger.error(f"Failed to decode message JSON: {e}")
-            await message.reject(requeue=False)
+            await self._safe_reject_message(message, "JSON decode error")
 
         except Exception as e:
             logger.error(f"Error processing message: {e}", exc_info=True)
             if not auto_ack:
-                await message.reject(requeue=False)
+                await self._safe_reject_message(message, str(e))
+
+    async def _safe_reject_message(
+        self,
+        message: AbstractIncomingMessage,
+        reason: str
+    ) -> None:
+        """
+        Safely reject a message, handling the case where it was already processed.
+
+        Args:
+            message: Incoming RabbitMQ message to reject.
+            reason: Human-readable reason for the rejection (for logging).
+        """
+        try:
+            await message.reject(requeue=False)
+            logger.debug(f"Message rejected: {reason}")
+        except aio_pika.exceptions.MessageProcessError:
+            logger.warning(
+                f"Message already processed (reject failed, reason: {reason}) - "
+                "likely redelivered or already acknowledged elsewhere"
+            )
 
     async def disconnect(self) -> None:
         """

@@ -41,6 +41,11 @@ Aunque el caso de uso actual es **Estaciones de ITV**, el sistema debe ser **agn
 	- `dlq.normalized_data.itv_stations`
 	- `dlq.rejected_data.itv_stations`
 
+### 5) Hotfix ACK en Normalizer (Mayo 2026)
+- Se detectó un escenario de doble ACK en el consumo raw del Normalizer, especialmente sensible en modo LLM batch.
+- Se fijó el arranque del worker para usar `consume_raw(..., auto_ack=True)` y delegar el ACK/REJECT al callback interno del worker.
+- Efecto esperado: evitar que registros válidos terminen en DLQ por error técnico de ciclo de ACK/rechazo.
+
 # Diseño del Sistema ITV Backend
 
 ## Flujo de Datos
@@ -82,13 +87,53 @@ Notas de autenticación:
 - Objetivo: comparar resultados y métricas sin contaminación entre métodos.
 - Esto habilita conclusiones experimentales trazables para el TFG.
 
-### 4) Operación manual de invalidación
+### 4) Modelo canónico de dominio
+El sistema no expone el formato bruto de cada proveedor como contrato final. En su lugar, converge hacia un **modelo canónico pequeño y estable** que homogeneiza semántica, tipado y trazabilidad entre fuentes heterogéneas.
+
+Implementado en [domain/itv_stations/schemas.py](../domain/itv_stations/schemas.py):
+
+```python
+class NormalizedStation(BaseModel):
+    """Universal normalized model for ITV station data."""
+    
+    station_id: str                                    # ID con prefijo de fuente (CAT_001)
+    name: str                                          # Nombre limpio y normalizado
+    source_system: Literal["catalunya", "valencia", "galicia"]
+    
+    # Ubicación (opcionales, con bounds geográficos de España)
+    address: Optional[str]
+    city: Optional[str]                               # Normalizado a UPPERCASE
+    province: Optional[str]                           # Normalizado a UPPERCASE
+    postal_code: Optional[str]                        # Pattern: ^\d{5}$
+    
+    # Coordenadas (validadas dentro de límites de España)
+    latitude: Optional[float]                         # [36.0, 43.8]
+    longitude: Optional[float]                        # [-9.3, 4.3]
+    
+    # Contacto
+    phone: Optional[str]
+    email: Optional[str]
+    
+    # Trazabilidad
+    raw_id: Optional[str]                             # ID original en fuente
+    normalized_at: datetime                           # Timestamp UTC
+```
+
+Este modelo demuestra, a nivel académico:
+- **contrato estable** entre normalizador y persistencia (agnóstico a BD),
+- **tipado estricto** con Pydantic y validadores embebidos,
+- **normalización de campos**: city/province a UPPERCASE, nombres limpios, phone formateado,
+- **homogeneización semántica** entre proveedores (Catalunya XML, Valencia JSON, Galicia CSV → un único schema),
+- **independencia del origen**: source_system es solo metadato, no determina estructura,
+- **validación geográfica**: bounds de España en latitud/longitud para evitar datos inválidos.
+
+### 5) Operación manual de invalidación
 - Nuevo endpoint de mantenimiento:
 	- `DELETE /api/v1/monitoring/llm-rules/{source_system}/{province_type}`
 - Uso: invalidar regla activa para forzar regeneración en el siguiente batch.
 - Escenario típico: cambio de formato en origen o ajuste de prompt/modelo.
 
-### 5) Restriccion de instancia unica (limites LLM)
+### 6) Restriccion de instancia unica (limites LLM)
 - GitHub Models limita a 15 requests/min y 5 concurrentes.
 - El normalizer aplica batching por cola y un retraso minimo entre peticiones.
 - Este modo asume 1 instancia del normalizer; escalar horizontalmente requiere un coordinador global de rate limit.

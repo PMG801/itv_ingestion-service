@@ -110,6 +110,9 @@ class NormalizerWorker:
             await self.consumer.consume_raw(
                 queue_name="raw_data.itv_stations",
                 callback=self._enqueue_message_for_batch,
+                # Manual ACK/REJECT is handled in normalizer callbacks (single + batch paths).
+                # auto_ack=True here disables wrapper-level ack/reject to avoid double-processing.
+                auto_ack=True,
                 arguments=dlx_args,
             )
 
@@ -145,6 +148,8 @@ class NormalizerWorker:
         parent_message_id = message.get("parent_message_id")
         station_sequence = message.get("station_sequence")
         total_stations = message.get("total_stations")
+        injection_type = message.get("injection_type")
+        injection_metadata = message.get("injection_metadata")
 
         # TIMING: Capturar cuando inicia el normalizer
         normalizer_started_at = datetime.now(timezone.utc)
@@ -290,6 +295,10 @@ class NormalizerWorker:
                 timing_context["station_sequence"] = station_sequence
             if isinstance(total_stations, int):
                 timing_context["total_stations"] = total_stations
+            if isinstance(injection_type, str):
+                timing_context["injection_type"] = injection_type
+            if isinstance(injection_metadata, dict):
+                timing_context["injection_metadata"] = injection_metadata
             if llm_mode and llm_inference_start_ts is not None:
                 timing_context["llm_inference_start"] = llm_inference_start_ts.isoformat()
             if llm_mode and llm_inference_end_ts is not None:
@@ -516,6 +525,8 @@ class NormalizerWorker:
                 parent_message_id = payload.get("parent_message_id")
                 station_sequence = payload.get("station_sequence")
                 total_stations = payload.get("total_stations")
+                injection_type = payload.get("injection_type")
+                injection_metadata = payload.get("injection_metadata")
 
                 if station is None:
                     await self._publish_rejected(

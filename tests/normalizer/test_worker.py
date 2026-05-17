@@ -33,6 +33,23 @@ def _build_station(
 
 
 @pytest.mark.asyncio
+async def test_start_uses_manual_ack_path_in_callback(monkeypatch: pytest.MonkeyPatch) -> None:
+    worker = NormalizerWorker()
+    monkeypatch.setattr(settings, "NORMALIZATION_MODE", "RULES")
+
+    worker.consumer = Mock(connect=AsyncMock(), consume_raw=AsyncMock())
+    worker.publisher = Mock(connect=AsyncMock())
+
+    await worker.start()
+
+    worker.consumer.consume_raw.assert_awaited_once()
+    consume_call = worker.consumer.consume_raw.await_args
+    assert consume_call.kwargs["queue_name"] == "raw_data.itv_stations"
+    assert consume_call.kwargs["callback"] == worker._enqueue_message_for_batch
+    assert consume_call.kwargs["auto_ack"] is True
+
+
+@pytest.mark.asyncio
 async def test_process_message_transforms_and_publishes_single_station(
     normalized_station_payload: dict[str, object],
     monkeypatch: pytest.MonkeyPatch,
