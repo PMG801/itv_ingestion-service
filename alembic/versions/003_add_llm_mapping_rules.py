@@ -116,11 +116,11 @@ def upgrade() -> None:
             name="ck_llm_rules_is_active_bool",
         ),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint(
+        sa.Index(
+            "uq_llm_rules_active_per_source_type",
             "source_system",
             "province_type",
-            "is_active",
-            name="uq_llm_rules_active_per_source_type",
+            unique=True,
             postgresql_where=sa.text("is_active = true"),
         ),
         schema="itv",
