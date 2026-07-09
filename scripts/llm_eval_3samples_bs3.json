@@ -1,0 +1,73 @@
+{
+  "executed_at": "2026-04-20T19:03:25.386122+00:00",
+  "samples_per_source": 3,
+  "batch_size": 3,
+  "total_records": 9,
+  "total_valid": 3,
+  "valid_ratio": 0.3333,
+  "rows": [
+    {
+      "source": "catalunya",
+      "record_index": 0,
+      "time_ms": 196.389,
+      "valid": true,
+      "peak_memory_bytes": 921051
+    },
+    {
+      "source": "catalunya",
+      "record_index": 1,
+      "time_ms": 196.389,
+      "valid": false,
+      "peak_memory_bytes": 921051
+    },
+    {
+      "source": "catalunya",
+      "record_index": 2,
+      "time_ms": 196.389,
+      "valid": false,
+      "peak_memory_bytes": 921051
+    },
+    {
+      "source": "valencia",
+      "record_index": 0,
+      "time_ms": 177.671,
+      "valid": true,
+      "peak_memory_bytes": 303853
+    },
+    {
+      "source": "valencia",
+      "record_index": 1,
+      "time_ms": 177.671,
+      "valid": false,
+      "peak_memory_bytes": 303853
+    },
+    {
+      "source": "valencia",
+      "record_index": 2,
+      "time_ms": 177.671,
+      "valid": false,
+      "peak_memory_bytes": 303853
+    },
+    {
+      "source": "galicia",
+      "record_index": 0,
+      "time_ms": 165.437,
+      "valid": true,
+      "peak_memory_bytes": 304110
+    },
+    {
+      "source": "galicia",
+      "record_index": 1,
+      "time_ms": 165.437,
+      "valid": false,
+      "peak_memory_bytes": 304110
+    },
+    {
+      "source": "galicia",
+      "record_index": 2,
+      "time_ms": 165.437,
+      "valid": false,
+      "peak_memory_bytes": 304110
+    }
+  ]
+}

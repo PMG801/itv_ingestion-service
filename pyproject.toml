@@ -17,6 +17,8 @@ dependencies = [
     
     # Async Support
     "aiohttp==3.9.1",
+    "httpx==0.26.0",
+    "azure-ai-inference==1.0.0b9",
     
     # Message Broker
     "aio-pika==9.3.1",
@@ -36,6 +38,7 @@ dependencies = [
     # Data Processing
     "lxml==5.1.0",
     "Faker>=24.0.0,<30.0.0",
+    "rapidfuzz==3.13.0",
     
     # Utilities
     "python-dateutil==2.8.2",
@@ -63,17 +66,6 @@ build-backend = "pdm.backend"
 [tool.pdm]
 distribution = false
 
-[tool.pdm.dev-dependencies]
-dev = [
-    "pytest==7.4.4",
-    "pytest-asyncio==0.23.3",
-    "pytest-cov>=4.1.0",
-    "httpx==0.26.0",
-    "black>=23.12.0",
-    "ruff>=0.1.9",
-    "mypy>=1.8.0",
-]
-
 [tool.pdm.scripts]
 # Development
 dev-gateway = "uvicorn apps.gateway.main:app --reload --host 0.0.0.0 --port 8000"
@@ -83,12 +75,11 @@ dev-persister = "python -m apps.persister.worker"
 # Testing
 test = "pytest"
 test-cov = "pytest --cov=apps --cov=core --cov=domain --cov-report=html --cov-report=term"
-test-watch = "pytest-watch"
 
 # Code Quality
 format = "black ."
 lint = "ruff check ."
-type-check = "mypy apps core domain providers"
+type-check = "mypy apps core domain"
 
 [tool.black]
 line-length = 100

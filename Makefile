@@ -1,7 +1,7 @@
 # Makefile para ITV Data Engine
 # Comandos útiles para desarrollo
 
-.PHONY: help setup up down logs clean test test-all test-core test-domain test-gateway test-normalizer test-persister test-providers test-cov ensure-test-deps
+.PHONY: help setup up down logs clean test test-all test-core test-domain test-gateway test-normalizer test-persister test-cov ensure-test-deps
 
 # Variables para pytest
 TEST ?= tests
@@ -100,9 +100,6 @@ test-normalizer: ## Ejecutar tests de normalizer
 
 test-persister: ## Ejecutar tests de persister
 	$(MAKE) test TEST=tests/persister PYTEST_ARGS="$(PYTEST_ARGS)"
-
-test-providers: ## Ejecutar tests de providers
-	$(MAKE) test TEST=tests/providers PYTEST_ARGS="$(PYTEST_ARGS)"
 
 test-cov: ## Ejecutar tests con cobertura
 	@if [ -n "$(PDM_CMD)" ]; then \

@@ -1,5 +1,6 @@
 """Configuración centralizada de la aplicación usando Pydantic Settings."""
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,6 +30,32 @@ class Settings(BaseSettings):
     # Application settings
     APP_NAME: str = "ITV Ingestion Service"
     LOG_LEVEL: str = "INFO"
+    NORMALIZATION_MODE: str = "RULES"
+    FUZZY_THRESHOLD_HIGH: float = 0.85
+    FUZZY_THRESHOLD_LOW: float = 0.70
+    FUZZY_ALGORITHM: str = "jaro_winkler"
+
+    # LLM experiment settings
+    # Supported providers: groq, github_models
+    LLM_PROVIDER: str = "groq"
+    
+    # Groq-specific settings
+    GROQ_API_KEY: str = ""
+
+    # GitHub Models (Foundry) settings
+    GITHUB_TOKEN: str = ""
+    # Optional custom endpoint for GitHub Models (defaults to official Foundry endpoint)
+    GITHUB_MODELS_ENDPOINT: str = "https://models.github.ai/inference"
+    
+    # Common LLM settings
+    LLM_MODEL: str = "llama3-8b-8192"
+    LLM_BATCH_SIZE: int = 5
+    LLM_TEMPERATURE: float = 0.0
+    LLM_REQUEST_TIMEOUT_S: int = 30
+    LLM_NORMALIZER_BATCH_SIZE: int = 5
+    LLM_NORMALIZER_BATCH_TIMEOUT_MS: int = 500
+    LLM_GITHUB_MODELS_MIN_DELAY_MS: int = 4000
+    LLM_GROQ_MIN_DELAY_MS: int = 2000
 
     # RabbitMQ settings
     RABBITMQ_HOST: str = "rabbitmq"
@@ -36,6 +63,8 @@ class Settings(BaseSettings):
     RABBITMQ_USER: str = "admin"
     RABBITMQ_PASS: str = "admin123"
     RABBITMQ_VHOST: str = "itv_data"
+    # Per-channel prefetch (max unacknowledged messages delivered to consumer)
+    RABBITMQ_PREFETCH: int = 10
 
     # PostgreSQL settings
     POSTGRES_HOST: str = "postgres"
@@ -53,6 +82,38 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", case_sensitive=True, extra="ignore"
     )
+
+    @field_validator("LLM_PROVIDER")
+    @classmethod
+    def validate_llm_provider(cls, value: str) -> str:
+        """Allow approved remote LLM providers for this experiment."""
+        normalized = value.strip().lower()
+        allowed_providers = ("groq", "github_models")
+        if normalized not in allowed_providers:
+            raise ValueError(
+                f"Unsupported LLM provider '{value}'. Allowed providers: {', '.join(allowed_providers)}"
+            )
+        return normalized
+
+    @field_validator("LLM_MODEL")
+    @classmethod
+    def block_local_model_backends(cls, value: str) -> str:
+        """Explicitly block local LLM backends in model/provider strings."""
+        normalized = value.strip().lower()
+        forbidden_fragments = ("ollama", "llama.cpp", "llamacpp", "vllm", "localhost")
+        if any(fragment in normalized for fragment in forbidden_fragments):
+            raise ValueError(
+                "Local LLM backends are forbidden for this experiment (4GB RAM safety limit)."
+            )
+        return value
+
+    @field_validator("LLM_REQUEST_TIMEOUT_S")
+    @classmethod
+    def validate_llm_timeout(cls, value: int) -> int:
+        """Cap timeout at 30 seconds to avoid hanging workers."""
+        if value <= 0 or value > 30:
+            raise ValueError("LLM_REQUEST_TIMEOUT_S must be between 1 and 30 seconds")
+        return value
 
     @property
     def RABBITMQ_URL(self) -> str:

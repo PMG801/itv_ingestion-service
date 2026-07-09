@@ -58,8 +58,18 @@ class RabbitMQConsumer:
             # Open channel
             self.channel = await self.connection.channel()
 
-            # Set QoS (prefetch count) - process N messages at a time
-            await self.channel.set_qos(prefetch_count=10)
+            # Determine QoS (prefetch count) - process N messages at a time
+            prefetch_count = getattr(settings, "RABBITMQ_PREFETCH", 10)
+            try:
+                if getattr(settings, "NORMALIZATION_MODE", "").upper() == "LLM":
+                    # Align RabbitMQ prefetch with the LLM normalizer batch size
+                    prefetch_count = int(getattr(settings, "LLM_NORMALIZER_BATCH_SIZE", prefetch_count))
+            except Exception:
+                # Fall back to configured/default prefetch_count on any error
+                prefetch_count = int(prefetch_count)
+
+            await self.channel.set_qos(prefetch_count=prefetch_count)
+            logger.info(f"Consumer channel QoS set: prefetch_count={prefetch_count}")
 
             logger.info("Consumer connected to RabbitMQ successfully")
 
@@ -136,6 +146,45 @@ class RabbitMQConsumer:
             logger.error(f"Error consuming from queue {queue_name}: {e}", exc_info=True)
             raise
 
+    async def consume_raw(
+        self,
+        queue_name: str,
+        callback: Callable[[AbstractIncomingMessage, dict[str, Any]], Awaitable[None]],
+        auto_ack: bool = False,
+        arguments: dict[str, Any] | None = None,
+    ) -> None:
+        """
+        Start consuming messages from a queue with manual ack control.
+
+        The callback receives both the raw message and the deserialized payload.
+        When auto_ack is False, the callback is responsible for ack/reject.
+        """
+        if self.channel is None:
+            raise RuntimeError("Consumer not connected. Call connect() first.")
+        channel = self.channel
+
+        try:
+            queue = await channel.declare_queue(
+                queue_name,
+                durable=True,
+                arguments=arguments,
+            )
+
+            logger.info(f"Starting to consume from queue: {queue_name}")
+
+            async with queue.iterator() as queue_iter:
+                message: AbstractIncomingMessage
+                async for message in queue_iter:
+                    await self._process_raw_message(
+                        message=message,
+                        callback=callback,
+                        auto_ack=auto_ack,
+                    )
+
+        except Exception as e:
+            logger.error(f"Error consuming from queue {queue_name}: {e}", exc_info=True)
+            raise
+
     async def _process_message(
         self,
         message: AbstractIncomingMessage,
@@ -179,6 +228,71 @@ class RabbitMQConsumer:
             logger.error(f"Error processing message: {e}", exc_info=True)
             # Reject message and send to DLQ (don't requeue)
             await message.reject(requeue=False)
+
+    async def _process_raw_message(
+        self,
+        message: AbstractIncomingMessage,
+        callback: Callable[[AbstractIncomingMessage, dict[str, Any]], Awaitable[None]],
+        auto_ack: bool,
+    ) -> None:
+        """
+        Process a single message and pass raw message to callback.
+
+        Args:
+            message: Incoming RabbitMQ message.
+            callback: Function to process the message.
+            auto_ack: Whether to auto-acknowledge messages.
+        """
+        try:
+            payload = json.loads(message.body.decode("utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError("RabbitMQ message payload must be a JSON object")
+
+            logger.debug(
+                f"Received message: {payload.get('message_id', 'unknown')} "
+                f"from {payload.get('source', 'unknown')}"
+            )
+
+            await callback(message, payload)
+
+            if not auto_ack:
+                try:
+                    await message.ack()
+                except aio_pika.exceptions.MessageProcessError:
+                    logger.warning(
+                        f"Message {payload.get('message_id', 'unknown')} "
+                        "already processed (ack failed) - likely redelivered"
+                    )
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to decode message JSON: {e}")
+            await self._safe_reject_message(message, "JSON decode error")
+
+        except Exception as e:
+            logger.error(f"Error processing message: {e}", exc_info=True)
+            if not auto_ack:
+                await self._safe_reject_message(message, str(e))
+
+    async def _safe_reject_message(
+        self,
+        message: AbstractIncomingMessage,
+        reason: str
+    ) -> None:
+        """
+        Safely reject a message, handling the case where it was already processed.
+
+        Args:
+            message: Incoming RabbitMQ message to reject.
+            reason: Human-readable reason for the rejection (for logging).
+        """
+        try:
+            await message.reject(requeue=False)
+            logger.debug(f"Message rejected: {reason}")
+        except aio_pika.exceptions.MessageProcessError:
+            logger.warning(
+                f"Message already processed (reject failed, reason: {reason}) - "
+                "likely redelivered or already acknowledged elsewhere"
+            )
 
     async def disconnect(self) -> None:
         """

@@ -66,6 +66,15 @@ class RawIngestionMessage(BaseModel):
         description="Total station messages generated from the original payload",
         ge=1,
     )
+    injection_type: str | None = Field(
+        default=None,
+        description="Type of injection: api, file, synthetic, synthetic-mixed",
+        examples=["api", "file", "synthetic", "synthetic-mixed"],
+    )
+    injection_metadata: dict[str, object] | None = Field(
+        default=None,
+        description="Metadata for the injection (error_rate, count, error_types, etc.)",
+    )
 
     @field_validator("source")
     @classmethod

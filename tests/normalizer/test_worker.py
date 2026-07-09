@@ -7,7 +7,20 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from apps.normalizer.worker import NormalizerWorker
+from core.config import settings
 from domain.itv_stations.schemas import NormalizedStation
+from domain.itv_stations.transformers.fuzzy import FuzzyTransformer
+
+
+class StubFuzzyTransformer(FuzzyTransformer):
+    def __init__(self, source_system: str, scores: dict[tuple[str, str], float]) -> None:
+        super().__init__(source_system=source_system)
+        self._scores = scores
+
+    def _similarity_score(self, source_field: str, target_field: str) -> float:
+        if source_field == target_field:
+            return 1.0
+        return self._scores.get((source_field, target_field), 0.2)
 
 
 def _build_station(
@@ -20,10 +33,29 @@ def _build_station(
 
 
 @pytest.mark.asyncio
+async def test_start_uses_manual_ack_path_in_callback(monkeypatch: pytest.MonkeyPatch) -> None:
+    worker = NormalizerWorker()
+    monkeypatch.setattr(settings, "NORMALIZATION_MODE", "RULES")
+
+    worker.consumer = Mock(connect=AsyncMock(), consume_raw=AsyncMock())
+    worker.publisher = Mock(connect=AsyncMock())
+
+    await worker.start()
+
+    worker.consumer.consume_raw.assert_awaited_once()
+    consume_call = worker.consumer.consume_raw.await_args
+    assert consume_call.kwargs["queue_name"] == "raw_data.itv_stations"
+    assert consume_call.kwargs["callback"] == worker._enqueue_message_for_batch
+    assert consume_call.kwargs["auto_ack"] is True
+
+
+@pytest.mark.asyncio
 async def test_process_message_transforms_and_publishes_single_station(
     normalized_station_payload: dict[str, object],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     worker = NormalizerWorker()
+    monkeypatch.setattr(settings, "NORMALIZATION_MODE", "RULES")
     first_station = _build_station(
         normalized_station_payload, station_id="CAT_BCN-001", raw_id="BCN-001"
     )
@@ -41,7 +73,7 @@ async def test_process_message_transforms_and_publishes_single_station(
         }
     )
 
-    worker.factory.create.assert_called_once_with("catalunya")
+    worker.factory.create.assert_called_once_with("catalunya", normalization_mode="RULES")
     assert worker.publisher.publish.await_count == 1
     assert worker.messages_processed == 1
     assert worker.messages_failed == 0
@@ -50,8 +82,10 @@ async def test_process_message_transforms_and_publishes_single_station(
 @pytest.mark.asyncio
 async def test_process_message_fails_when_raw_message_contains_multiple_stations(
     normalized_station_payload: dict[str, object],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     worker = NormalizerWorker()
+    monkeypatch.setattr(settings, "NORMALIZATION_MODE", "RULES")
     first_station = _build_station(
         normalized_station_payload, station_id="CAT_BCN-001", raw_id="BCN-001"
     )
@@ -78,8 +112,11 @@ async def test_process_message_fails_when_raw_message_contains_multiple_stations
 
 
 @pytest.mark.asyncio
-async def test_process_message_accepts_empty_transformation_result() -> None:
+async def test_process_message_accepts_empty_transformation_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     worker = NormalizerWorker()
+    monkeypatch.setattr(settings, "NORMALIZATION_MODE", "RULES")
     transformer = Mock(transform=Mock(return_value=[]))
     transformer.rejected_items = []
     worker.factory = Mock(create=Mock(return_value=transformer))
@@ -109,8 +146,10 @@ async def test_process_message_accepts_empty_transformation_result() -> None:
 @pytest.mark.asyncio
 async def test_process_message_publishes_station_level_rejections(
     normalized_station_payload: dict[str, object],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     worker = NormalizerWorker()
+    monkeypatch.setattr(settings, "NORMALIZATION_MODE", "RULES")
     station = _build_station(normalized_station_payload, station_id="GAL_LU-001", raw_id="LU-001")
     transformer = Mock(transform=Mock(return_value=[station]))
     transformer.rejected_items = [
@@ -147,8 +186,11 @@ async def test_process_message_publishes_station_level_rejections(
 
 
 @pytest.mark.asyncio
-async def test_process_message_avoids_duplicate_message_rejection_when_station_rejected() -> None:
+async def test_process_message_avoids_duplicate_message_rejection_when_station_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     worker = NormalizerWorker()
+    monkeypatch.setattr(settings, "NORMALIZATION_MODE", "RULES")
     transformer = Mock(transform=Mock(return_value=[]))
     transformer.rejected_items = [
         {
@@ -199,6 +241,67 @@ async def test_process_message_marks_failure_for_invalid_message() -> None:
 
 
 @pytest.mark.asyncio
+async def test_process_message_uses_transform_async_in_llm_mode(
+    normalized_station_payload: dict[str, object],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    worker = NormalizerWorker()
+    monkeypatch.setattr(settings, "NORMALIZATION_MODE", "LLM")
+
+    station = _build_station(normalized_station_payload, station_id="CAT_BCN-001", raw_id="BCN-001")
+    transformer = Mock(transform_async=AsyncMock(return_value=[station]))
+    transformer.rejected_items = []
+    transformer.last_metrics = {
+        "llm_token_usage": 42,
+        "llm_pydantic_validation_errors": 0,
+    }
+
+    worker.factory = Mock(create=Mock(return_value=transformer))
+    worker.publisher = Mock(publish=AsyncMock())
+
+    await worker.process_message(
+        {
+            "message_id": "msg-llm-ok",
+            "source": "catalunya",
+            "payload": {"id": "BCN-001"},
+            "format": "json",
+        }
+    )
+
+    transformer.transform_async.assert_awaited_once()
+    worker.publisher.publish.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_process_message_rejects_message_on_llm_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    worker = NormalizerWorker()
+    monkeypatch.setattr(settings, "NORMALIZATION_MODE", "LLM")
+
+    transformer = Mock(transform_async=AsyncMock(return_value=[]))
+    transformer.rejected_items = [{"reason": "llm_timeout", "raw_fragment": {"id": "BCN-001"}}]
+    transformer.last_metrics = {"llm_last_error_reason": "llm_timeout"}
+
+    worker.factory = Mock(create=Mock(return_value=transformer))
+    worker.publisher = Mock(publish=AsyncMock())
+
+    await worker.process_message(
+        {
+            "message_id": "msg-llm-fail",
+            "source": "catalunya",
+            "payload": {"id": "BCN-001"},
+            "format": "json",
+        }
+    )
+
+    assert worker.publisher.publish.await_count == 2
+    message_level_rejection = worker.publisher.publish.await_args_list[1]
+    assert message_level_rejection.kwargs["exchange_name"] == "rejected_data"
+    assert message_level_rejection.kwargs["message"]["rejection_level"] == "message"
+    assert message_level_rejection.kwargs["message"]["reason"] == "llm_timeout"
+    assert worker.messages_rejected == 1
+
+
+@pytest.mark.asyncio
 async def test_shutdown_disconnects_consumer_and_publisher() -> None:
     worker = NormalizerWorker()
     worker.consumer = Mock(disconnect=AsyncMock())
@@ -210,3 +313,55 @@ async def test_shutdown_disconnects_consumer_and_publisher() -> None:
 
     worker.consumer.disconnect.assert_awaited_once()
     worker.publisher.disconnect.assert_awaited_once()
+
+
+def test_fuzzy_transformer_accepts_low_confidence_fields_and_records_metrics() -> None:
+    transformer = StubFuzzyTransformer(
+        source_system="galicia",
+        scores={("cityish", "city"): 0.75},
+    )
+    payload = {
+        "raw_id": "LUG-1",
+        "name": "ITV Lugo Centro",
+        "cityish": "Lugo",
+        "address": "Rúa da Industria 10",
+        "province": "Lugo",
+        "postal_code": "27001",
+        "phone": "982123456",
+    }
+
+    stations = transformer.transform(payload)
+
+    assert len(stations) == 1
+    low_conf_rejection = next(
+        item for item in transformer.rejected_items if item["reason"] == "fuzzy_low_confidence"
+    )
+    raw_fragment = low_conf_rejection["raw_fragment"]
+    assert isinstance(raw_fragment, dict)
+    assert "city" in cast(list[str], raw_fragment["low_confidence_fields"])
+    mapping_trace = cast(list[dict[str, object]], raw_fragment["mapping_trace"])
+    city_trace = next(trace for trace in mapping_trace if trace["target_field"] == "city")
+    assert city_trace["source_field"] == "cityish"
+    assert city_trace["score"] == 0.75
+    assert int(transformer.last_metrics["low_confidence_count"]) >= 1
+    assert float(transformer.last_metrics["confidence_mean"]) > 0
+
+
+def test_fuzzy_transformer_rejects_when_required_field_below_low_threshold() -> None:
+    transformer = StubFuzzyTransformer(
+        source_system="galicia",
+        scores={("registry_code", "raw_id"): 0.65},
+    )
+    payload = {
+        "registry_code": "LUG-2",
+        "name": "ITV Lugo Norte",
+    }
+
+    stations = transformer.transform(payload)
+
+    assert stations == []
+    assert any(item["reason"] == "fuzzy_mapping_failure" for item in transformer.rejected_items)
+    raw_fragment = transformer.rejected_items[0]["raw_fragment"]
+    assert isinstance(raw_fragment, dict)
+    rejected_raw_fragment = cast(dict[str, object], raw_fragment)
+    assert "mapping_trace" in rejected_raw_fragment

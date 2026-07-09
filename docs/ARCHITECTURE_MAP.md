@@ -27,10 +27,6 @@ El proyecto sigue una estructura modular estricta. NO colocar lógica de negocio
 │   │
 │   └── /traffic_lights    # (Futuro) Otro dominio.
 │
-├── /providers             # Adaptadores de Fuentes Externas
-│   ├── /catalunya_api     # Lógica para leer el XML de Cataluña.
-│   └── /valencia_api      # Lógica para leer el JSON de Valencia.
-│
 └── /docs                  # Contexto para desarrollo e IA.
 ```
 

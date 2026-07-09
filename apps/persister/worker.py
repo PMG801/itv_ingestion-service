@@ -286,6 +286,10 @@ class PersisterWorker:
                             "station_sequence": item.timing_context.get("station_sequence"),
                             "total_stations": item.timing_context.get("total_stations"),
                         },
+                        "injection": {
+                            "type": item.timing_context.get("injection_type"),
+                            "metadata": item.timing_context.get("injection_metadata"),
+                        },
                     }
                     session.add(log_entry)
 
@@ -346,6 +350,10 @@ class PersisterWorker:
                             "batch_id": batch_id,
                             "batch_size": len(batch_items),
                             "retry_attempts": self.retry_max_attempts,
+                        },
+                        "injection": {
+                            "type": item.timing_context.get("injection_type"),
+                            "metadata": item.timing_context.get("injection_metadata"),
                         },
                         "error_in_step": "batch_persistence",
                     }

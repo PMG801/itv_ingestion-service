@@ -37,9 +37,6 @@ Sistema backend de alto rendimiento para la ingesta, normalización y persistenc
 │   └── /logging          # Configuración de logs
 ├── /domain               # Lógica de negocio
 │   └── /itv_stations     # Dominio ITV
-├── /providers            # Adaptadores de APIs externas
-│   ├── /catalunya_api    # XML Cataluña
-│   └── /valencia_api     # JSON Valencia
 ├── /infra                # Configuración de infraestructura
 │   ├── /rabbitmq         # Definiciones y configuración
 │   └── /postgres         # Scripts de inicialización
@@ -131,6 +128,45 @@ Edita el archivo `.env`:
 NORMALIZER_REPLICAS=4  # Número de workers normalizadores
 PERSISTER_REPLICAS=2   # Número de workers persistidores
 ```
+
+### Experimento LLM (Groq)
+
+Para ejecutar el experimento de mapeo semántico con LLM, configura en `.env`:
+
+```bash
+LLM_PROVIDER=groq
+GROQ_API_KEY=gsk_your_key_here
+LLM_MODEL=llama3-8b-8192
+LLM_BATCH_SIZE=5
+LLM_TEMPERATURE=0.0
+LLM_REQUEST_TIMEOUT_S=30
+NORMALIZATION_MODE=LLM
+```
+
+Restricciones del experimento:
+
+### Experimento LLM con Múltiples Proveedores
+
+El sistema soporta múltiples proveedores LLM a través de un plugin architecture configurable:
+
+#### Opción 1: Groq (Predeterminado)
+```bash
+LLM_PROVIDER=groq
+GROQ_API_KEY=gsk_your_key_here
+LLM_MODEL=llama3-8b-8192
+LLM_BATCH_SIZE=5
+LLM_TEMPERATURE=0.0
+LLM_REQUEST_TIMEOUT_S=30
+NORMALIZATION_MODE=LLM
+```
+
+Para más detalles de configuración y opciones avanzadas, consulta la sección de entorno en [docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md).
+curl -X DELETE http://localhost:8000/api/v1/monitoring/llm-rules/{source_system}/{province_type}
+```
+
+**Paso 4: Monitorear métricas**
+- Acceder a: http://localhost:8000/api/v1/monitoring/metrics
+- Verificar: `llm_rule_cache_hit`, `llm_token_usage` (estos cambiarán al cambiar modelo)
 
 ### RabbitMQ Exchanges y Queues
 - **raw_data:** Datos sin procesar

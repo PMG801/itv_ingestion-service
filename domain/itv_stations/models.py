@@ -266,3 +266,114 @@ class IngestionLog(Base):
             f"message_id='{self.message_id}', "
             f"status='{self.status}')>"
         )
+
+
+class LLMMappingRule(Base):
+    """
+    Modelo ORM para reglas de mapeo aprendidas por el LLM.
+
+    Almacena reglas de mapeo descubiertas por el LLM para evitar llamadas innecesarias
+    en futuras ejecuciones con fuentes del mismo tipo de provincia. Cada regla se identifica
+    por una clave única (source_system + province_type) y se versionan para auditoría.
+
+    Este modelo está separado del sistema manual RULES y solo se usa en modo LLM_TRANSFORMER.
+
+    Attributes:
+        id: Clave primaria autoincremental
+        source_system: Sistema fuente ('catalunya', 'valencia', 'galicia')
+        province_type: Tipo de provincia que determina la estructura de la fuente
+        field_mapping: Mapeo de campos descubierto por LLM (JSON)
+        llm_model: Modelo LLM que generó la regla
+        llm_prompt_version: Versión del prompt usado para generar la regla
+        confidence_score: Confianza del LLM en esta regla (0-1)
+        sample_schema_signature: Firma del esquema del ejemplo usado para generar regla
+        is_active: Si la regla es la activa (solo una activa por clave)
+        generated_at: Timestamp de generación de la regla
+        updated_at: Timestamp de última actualización
+        created_at: Timestamp de creación en BBDD
+    """
+
+    __tablename__ = "llm_mapping_rules"
+    __table_args__ = (
+        # Constraint único: solo una regla activa por (source_system, province_type)
+        UniqueConstraint(
+            "source_system", "province_type", "is_active",
+            name="uq_llm_rules_active_per_source_type",
+        ),
+        # Validar que source_system sea uno de los permitidos
+        CheckConstraint(
+            "source_system IN ('catalunya', 'valencia', 'galicia')",
+            name="ck_llm_rules_source_valida",
+        ),
+        # Validar que is_active sea boolean
+        CheckConstraint(
+            "is_active IN (true, false)",
+            name="ck_llm_rules_is_active_bool",
+        ),
+        # Schema PostgreSQL
+        {"schema": "itv"},
+    )
+
+    # Primary Key
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # Identificadores de regla
+    source_system: Mapped[str] = mapped_column(
+        String(50), nullable=False, comment="Sistema fuente (catalunya, valencia, galicia)"
+    )
+    province_type: Mapped[str] = mapped_column(
+        String(100), nullable=False, comment="Tipo de provincia que genera este patrón"
+    )
+
+    # Regla de mapeo descubierta
+    field_mapping: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, comment="Mapeo de campos descubierto: {source_field: target_field}"
+    )
+
+    # Trazabilidad del modelo LLM
+    llm_model: Mapped[str] = mapped_column(
+        String(255), nullable=False, comment="Nombre del modelo LLM usado (e.g., 'gpt-4', 'llama3-8b')"
+    )
+    llm_prompt_version: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="1.0", comment="Versión del prompt usado"
+    )
+
+    # Métricas de confianza
+    confidence_score: Mapped[float] = mapped_column(
+        Float, nullable=False, comment="Confianza del LLM (0.0-1.0)"
+    )
+    sample_schema_signature: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True, comment="Firma SHA256 del esquema del ejemplo usado"
+    )
+
+    # Ciclo de vida de la regla
+    is_active: Mapped[bool] = mapped_column(
+        default=True, nullable=False, comment="Si esta regla es la activa actualmente"
+    )
+
+    # Timestamps
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, comment="Timestamp de generación de la regla por LLM"
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        comment="Timestamp de última actualización",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        comment="Timestamp de creación en base de datos",
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<LLMMappingRule(id={self.id}, "
+            f"source={self.source_system}, "
+            f"province_type='{self.province_type}', "
+            f"is_active={self.is_active})>"
+        )
+

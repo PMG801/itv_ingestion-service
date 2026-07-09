@@ -3,8 +3,11 @@ from __future__ import annotations
 import pytest
 
 from apps.normalizer.factory import TransformerFactory
+from core.config import settings
 from domain.itv_stations.transformers.base import BaseTransformer
 from domain.itv_stations.transformers.catalunya import CatalunyaTransformer
+from domain.itv_stations.transformers.fuzzy import FuzzyTransformer
+from domain.itv_stations.transformers.llm_transformer import LLMTransformer
 
 
 class DummyTransformer(BaseTransformer):
@@ -16,8 +19,9 @@ class DummyTransformer(BaseTransformer):
 
 
 @pytest.fixture(autouse=True)
-def restore_transformer_registry() -> None:
+def restore_transformer_registry(monkeypatch: pytest.MonkeyPatch) -> None:
     original = TransformerFactory._transformers.copy()
+    monkeypatch.setattr(settings, "NORMALIZATION_MODE", "RULES")
     try:
         yield
     finally:
@@ -82,3 +86,27 @@ def test_factory_create_all_sources() -> None:
         transformer = TransformerFactory.create(source)
         assert isinstance(transformer, BaseTransformer)
         assert transformer.source_system == source
+
+
+def test_factory_creates_fuzzy_transformer_when_mode_is_fuzzy(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "NORMALIZATION_MODE", "FUZZY")
+
+    transformer = TransformerFactory.create("unsupported-source")
+
+    assert isinstance(transformer, FuzzyTransformer)
+
+
+def test_factory_rejects_invalid_normalization_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "NORMALIZATION_MODE", "BROKEN")
+
+    with pytest.raises(ValueError, match="Unsupported normalization mode"):
+        TransformerFactory.create("catalunya")
+
+
+def test_factory_creates_llm_transformer_when_mode_is_llm(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "NORMALIZATION_MODE", "LLM")
+
+    transformer = TransformerFactory.create("catalunya")
+
+    assert isinstance(transformer, LLMTransformer)
+    assert transformer.source_system == "catalunya"

@@ -9,10 +9,13 @@ import logging
 from collections.abc import Callable
 from typing import ClassVar, cast
 
+from core.config import settings
 from domain.itv_stations.transformers.base import BaseTransformer
 from domain.itv_stations.transformers.catalunya import CatalunyaTransformer
-from domain.itv_stations.transformers.valencia import ValenciaTransformer
+from domain.itv_stations.transformers.fuzzy import FuzzyTransformer
 from domain.itv_stations.transformers.galicia import GaliciaTransformer
+from domain.itv_stations.transformers.llm_transformer import LLMTransformer
+from domain.itv_stations.transformers.valencia import ValenciaTransformer
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +45,11 @@ class TransformerFactory:
     }
 
     @classmethod
-    def create(cls, source_system: str) -> BaseTransformer:
+    def create(
+        cls,
+        source_system: str,
+        normalization_mode: str | None = None,
+    ) -> BaseTransformer:
         """
         Create transformer for the given source system.
 
@@ -62,6 +69,18 @@ class TransformerFactory:
             True
         """
         source_lower = source_system.lower().strip()
+        mode = (normalization_mode or settings.NORMALIZATION_MODE).upper().strip()
+
+        if mode == "FUZZY":
+            logger.debug("Creating FuzzyTransformer (NORMALIZATION_MODE=FUZZY)")
+            return FuzzyTransformer(source_system=source_lower)
+        if mode == "LLM":
+            logger.debug("Creating LLMTransformer (NORMALIZATION_MODE=LLM)")
+            return LLMTransformer(source_system=source_lower)
+        if mode != "RULES":
+            raise ValueError(
+                f"Unsupported normalization mode: '{mode}'. Supported modes: RULES, FUZZY, LLM"
+            )
 
         transformer_factory = cls._transformers.get(source_lower)
 
